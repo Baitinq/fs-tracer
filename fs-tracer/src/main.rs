@@ -1,8 +1,14 @@
+use std::fmt::Write;
+
+use aya::maps::AsyncPerfEventArray;
 use aya::programs::TracePoint;
+use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
 use log::{info, warn, debug};
-use tokio::signal;
+use tokio::{signal, task};
+use bytes::BytesMut;
+use fs_tracer_common::WriteSyscallBPF;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -37,10 +43,33 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     let program: &mut TracePoint = bpf.program_mut("fs_tracer").unwrap().try_into()?;
     program.load()?;
-    program.attach("syscalls", "sys_enter_open")?;
+    //program.attach("syscalls", "sys_enter_open")?;
     program.attach("syscalls", "sys_enter_write")?;
-    program.attach("syscalls", "sys_enter_lseek")?;
-    program.attach("syscalls", "sys_enter_close")?;
+    //program.attach("syscalls", "sys_enter_lseek")?;
+    //program.attach("syscalls", "sys_enter_close")?;
+
+    println!("Num of cpus: {}", online_cpus()?.len());
+
+    let mut perf_array =
+        AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
+        for cpu_id in online_cpus()? {
+            let mut buf = perf_array.open(cpu_id, None)?;
+    
+            task::spawn(async move {
+                let mut buffers = (0..10)
+                    .map(|_| BytesMut::with_capacity(1024))
+                    .collect::<Vec<_>>();
+    
+                loop {
+                    let events = buf.read_events(&mut buffers).await.unwrap();
+                    for buf in buffers.iter_mut().take(events.read) {
+                        let ptr = buf.as_ptr() as *const WriteSyscallBPF;
+                        let data = unsafe { ptr.read_unaligned() };
+                        println!("KERNEL: DATA {:?}", data);
+                    }
+                }
+            });
+        }
 
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;
