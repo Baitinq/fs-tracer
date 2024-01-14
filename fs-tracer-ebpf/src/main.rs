@@ -109,7 +109,8 @@ fn handle_sys_write(ctx: TracePointContext) -> Result<u32, u32> {
 }
 
 //TODO: How are we going to correlate. We have open of a filename, we need to insert that into (pid, fd) -> filename. on close we remove from map. we need some timeout to remove stale entries
-//TODO: to get the fd from open, we need to know the return value of the syscall. for that we need a tracepoint on end and keep a map of (tgid, pid) -> WriteSyscallBPF)
+//TODO: to get the fd from open, we need to know the return value of the syscall. for that we need a tracepoint on end and keep a map of (tgid, pid) -> WriteSyscallBPF). we need to differenciate the syscalls by id
+//TODO: Maybe we can use git itself for the diffs etc.
 
 fn get_string_from_userspace(ptr: *const u8, buf: &mut [u8]) {
     unsafe { gen::bpf_probe_read_user_str( buf.as_mut_ptr() as *mut c_void, buf.len() as u32, ptr as *const c_void) };

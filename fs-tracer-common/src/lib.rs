@@ -19,7 +19,7 @@ impl fmt::Debug for WriteSyscallBPF {
         f.debug_struct("WriteSyscallArgs")
             .field("pid", &self.pid)
             .field("fd", &self.fd)
-            .field("buf", &unsafe { str::from_utf8_unchecked(&self.buf) })
+            .field("buf", &str::from_utf8(&self.buf).unwrap_or("") )
             .field("count", &self.count)
             .finish()
     }
