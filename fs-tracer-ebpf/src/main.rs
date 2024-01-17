@@ -21,6 +21,8 @@ static EVENTS: PerfEventArray<WriteSyscallBPF> = PerfEventArray::with_max_entrie
 #[map]
 static SYSCALLENTERS: HashMap<u32, WriteSyscallBPF> = HashMap::with_max_entries(1024, 0);
 
+//TODO: Clean up code. Generics. Arbitrary length buffer? https://github.com/elbaro/mybee/blob/fe037927b848cdbe399c0b0730ae79400cf95279/mybee-ebpf/src/main.rs#L29
+
 enum SyscallType {
     ENTER,
     EXIT,
