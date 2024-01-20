@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 use aya::maps::AsyncPerfEventArray;
 use aya::programs::TracePoint;
 use aya::util::online_cpus;
@@ -8,7 +6,7 @@ use aya_log::BpfLogger;
 use log::{info, warn, debug};
 use tokio::{signal, task};
 use bytes::BytesMut;
-use fs_tracer_common::WriteSyscallBPF;
+use fs_tracer_common::SyscallInfo;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -68,9 +66,11 @@ async fn main() -> Result<(), anyhow::Error> {
                 loop {
                     let events = buf.read_events(&mut buffers).await.unwrap();
                     for buf in buffers.iter_mut().take(events.read) {
-                        let ptr = buf.as_ptr() as *const WriteSyscallBPF;
+                        let ptr = buf.as_ptr() as *const SyscallInfo;
                         let data = unsafe { ptr.read_unaligned() };
-                        println!("KERNEL: DATA {:?}", data);
+                        match data {
+                            SyscallInfo::Write(x) =>  println!("KERNEL: DATA {:?}", x),
+                        }
                     }
                 }
             });

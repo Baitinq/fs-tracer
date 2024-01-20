@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::ffi::c_void;
-
 use aya_bpf::helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes};
 use aya_bpf::maps::HashMap;
 use aya_bpf::{
@@ -12,10 +10,10 @@ use aya_bpf::{
     BpfContext,
 };
 use aya_log_ebpf::info;
-use fs_tracer_common::WriteSyscallBPF;
+use fs_tracer_common::{SyscallInfo, WriteSyscallBPF};
 
 #[map]
-static EVENTS: PerfEventArray<WriteSyscallBPF> = PerfEventArray::with_max_entries(1024, 0);
+static EVENTS: PerfEventArray<SyscallInfo> = PerfEventArray::with_max_entries(1024, 0);
 
 #[map]
 static SYSCALLENTERS: HashMap<u32, WriteSyscallBPF> = HashMap::with_max_entries(1024, 0);
@@ -152,9 +150,9 @@ fn handle_sys_write_exit(ctx: TracePointContext) -> Result<u32, u32> {
 
     let tgid = ctx.tgid();
     if let Some(&syscall) = unsafe { SYSCALLENTERS.get(&tgid) } {
-        let mut newsyscall = syscall.clone();
+        let mut newsyscall: WriteSyscallBPF = syscall;
         newsyscall.ret = ret;
-        EVENTS.output(&ctx, &newsyscall, 0);
+        EVENTS.output(&ctx, &SyscallInfo::Write(newsyscall), 0);
     }
     //syscall_enter.ret = ret;
     //EVENTS.output(&ctx, &syscall_enter, 0);

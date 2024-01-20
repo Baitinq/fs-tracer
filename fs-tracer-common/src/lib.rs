@@ -1,8 +1,11 @@
 #![no_std]
 
-use core::fmt::{Formatter, self};
+use core::fmt::{self, Formatter};
 use core::str;
 
+pub enum SyscallInfo {
+    Write(WriteSyscallBPF),
+}
 
 #[derive(Clone, Copy)]
 pub struct WriteSyscallBPF {
@@ -21,7 +24,7 @@ impl fmt::Debug for WriteSyscallBPF {
         f.debug_struct("WriteSyscallBPF")
             .field("pid", &self.pid)
             .field("fd", &self.fd)
-            .field("buf", &str::from_utf8(&self.buf).unwrap_or("") )
+            .field("buf", &str::from_utf8(&self.buf).unwrap_or(""))
             .field("count", &self.count)
             .field("ret", &self.ret)
             .finish()
