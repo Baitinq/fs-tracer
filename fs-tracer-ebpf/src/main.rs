@@ -1,7 +1,15 @@
 #![no_std]
 #![no_main]
 
-use aya_bpf::helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes};
+use core::fmt::Error;
+mod syscalls;
+use core::str;
+mod vmlinux;
+
+use aya_bpf::helpers::{
+    bpf_get_current_task, bpf_get_current_task_btf, bpf_probe_read_kernel_str_bytes,
+    bpf_probe_read_user_str_bytes,
+};
 use aya_bpf::maps::HashMap;
 use aya_bpf::{
     macros::{map, tracepoint},
@@ -11,12 +19,18 @@ use aya_bpf::{
 };
 use aya_log_ebpf::info;
 use fs_tracer_common::{SyscallInfo, WriteSyscallBPF};
+use vmlinux::{dentry, fs_struct, path, task_struct};
 
 #[map]
-static EVENTS: PerfEventArray<SyscallInfo> = PerfEventArray::with_max_entries(1024, 0);
+static EVENTS: PerfEventArray<SyscallInfo> = PerfEventArray::with_max_entries(24, 0);
 
+// NOTE: We use this map for tracking syscalls. We have a tracepoint both at the entry
+// and exit of a syscall. Since we need to get arguments from both places, we need to be
+// able to correlate a syscall enter to an exit. We do this via the tgid. Since a thread
+// can only execute 1 syscall at a time, we can have a map of tgid -> syscall of size =
+// num_of_threads.
 #[map]
-static SYSCALLENTERS: HashMap<u32, WriteSyscallBPF> = HashMap::with_max_entries(1024, 0);
+static SYSCALL_ENTERS: HashMap<u32, SyscallInfo> = HashMap::with_max_entries(24, 0);
 
 //TODO: Clean up code. Generics. Arbitrary length buffer? https://github.com/elbaro/mybee/blob/fe037927b848cdbe399c0b0730ae79400cf95279/mybee-ebpf/src/main.rs#L29
 
@@ -38,6 +52,7 @@ pub fn fs_tracer_enter(ctx: TracePointContext) -> u32 {
 
 #[tracepoint]
 pub fn fs_tracer_exit(ctx: TracePointContext) -> u32 {
+    info!(&ctx, "Hi");
     match try_fs_tracer(ctx, SyscallType::Exit) {
         Ok(ret) => ret,
         Err(ret) => ret,
@@ -74,11 +89,8 @@ fn handle_syscall(
     syscall_type: SyscallType,
 ) -> Result<u32, u32> {
     match syscall_nr {
-        1 => handle_sys_write(ctx, syscall_type),
-        2 => {
-            Ok(0)
-            //handle_sys_open(ctx);
-        }
+        1 => syscalls::write::handle_sys_write(ctx, syscall_type),
+        257 => syscalls::open::handle_sys_open(ctx, syscall_type),
         8 => {
             Ok(0)
             //handle_sys_lseek(ctx);
@@ -92,72 +104,6 @@ fn handle_syscall(
             Err(1)
         }
     }
-}
-
-fn handle_sys_write(ctx: TracePointContext, syscall_type: SyscallType) -> Result<u32, u32> {
-    match syscall_type {
-        SyscallType::Enter => handle_sys_write_enter(ctx),
-        SyscallType::Exit => handle_sys_write_exit(ctx),
-    }
-}
-
-fn handle_sys_write_enter(ctx: TracePointContext) -> Result<u32, u32> {
-    // info!(&ctx, "handle_sys_write start");
-    #[derive(Clone, Copy)]
-    struct WriteSyscallArgs {
-        fd: u64,
-        buf: *const u8,
-        count: u64,
-    }
-    let args = unsafe { *ptr_at::<WriteSyscallArgs>(&ctx, 16).unwrap() };
-
-    // if fd is stdout, stderr or stdin, ignore
-    if args.fd <= 2 {
-        return Ok(0);
-    }
-
-    // info!(&ctx, "argfs fd: {}", args.fd);
-    let mut buf = [0u8; 96]; //we need to make this muuuuuch bigger
-                             //get_string_from_userspace(args.buf, unsafe { &mut *READ_FROM_USERSPACE_BUFFER.get_ptr_mut(0).unwrap() });
-                             //get_string_from_userspace(args.buf, &mut buf);
-    let _ = unsafe { bpf_probe_read_user_str_bytes(args.buf, &mut buf) };
-    let buf_ref = &buf;
-    // info!(&ctx, "buf: {}", unsafe { str::from_utf8_unchecked(buf_ref) });
-    //info!(&ctx, "count: {}", args.count);                                                                                                               ";
-
-    let mut anotherbuf = [0u8; 96];
-    let _ = unsafe { bpf_probe_read_kernel_str_bytes(buf_ref.as_ptr(), &mut anotherbuf) };
-
-    let tgid: u32 = ctx.tgid();
-    let _ = SYSCALLENTERS.insert(
-        &tgid,
-        &WriteSyscallBPF {
-            pid: ctx.pid(),
-            fd: args.fd,
-            buf: anotherbuf,
-            count: args.count,
-            ret: -9999,
-        },
-        0,
-    );
-
-    Ok(0)
-}
-
-fn handle_sys_write_exit(ctx: TracePointContext) -> Result<u32, u32> {
-    //info!(&ctx, "handle_sys_write_exit start");
-    let ret = unsafe { *ptr_at::<i64>(&ctx, 16).unwrap() }; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
-
-    let tgid = ctx.tgid();
-    if let Some(&syscall) = unsafe { SYSCALLENTERS.get(&tgid) } {
-        let mut newsyscall: WriteSyscallBPF = syscall;
-        newsyscall.ret = ret;
-        EVENTS.output(&ctx, &SyscallInfo::Write(newsyscall), 0);
-    }
-    //syscall_enter.ret = ret;
-    //EVENTS.output(&ctx, &syscall_enter, 0);
-
-    Ok(0)
 }
 
 // thread can only execute 1 syscall at a time <-

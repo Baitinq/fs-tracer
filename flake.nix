@@ -27,7 +27,12 @@
               targets = [ "x86_64-unknown-linux-gnu" "wasm32-unknown-unknown" ];
             })
             trunk
+	    bpftools
+	    llvmPackages_11.libclang.lib
           ];
+	  shellHook = ''
+    export LIBCLANG_PATH="${pkgs.llvmPackages_11.libclang.lib}/lib"
+  '';
         };
       }
     );

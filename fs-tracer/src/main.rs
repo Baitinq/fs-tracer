@@ -39,17 +39,18 @@ async fn main() -> Result<(), anyhow::Error> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-    let program: &mut TracePoint = bpf.program_mut("fs_tracer_enter").unwrap().try_into()?;
-    program.load()?;
-    //program.attach("syscalls", "sys_enter_open")?;
-    program.attach("syscalls", "sys_enter_write")?;
+    let trace_enters_program: &mut TracePoint = bpf.program_mut("fs_tracer_enter").unwrap().try_into()?;
+    trace_enters_program.load()?;
+    trace_enters_program.attach("syscalls", "sys_enter_openat")?; //TODO: For some reason enter not being called. Try c program or assembly
+    //trace_enters_program.attach("syscalls", "sys_enter_write")?;
 // program.attach("syscalls", "sys_exit_write")?;
-    //program.attach("syscalls", "sys_enter_lseek")?;
+//trace_enters_program.attach("syscalls", "sys_enter_lseek")?;
     //program.attach("syscalls", "sys_enter_close")?;
 
-    let program2: &mut TracePoint = bpf.program_mut("fs_tracer_exit").unwrap().try_into()?;
-    program2.load()?;
-    program2.attach("syscalls", "sys_exit_write")?;
+    let trace_exits_program: &mut TracePoint = bpf.program_mut("fs_tracer_exit").unwrap().try_into()?;
+    trace_exits_program.load()?;
+    trace_exits_program.attach("syscalls", "sys_exit_open")?;
+    //program2.attach("syscalls", "sys_exit_write")?;
 
     println!("Num of cpus: {}", online_cpus()?.len());
 
