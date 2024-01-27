@@ -6,6 +6,7 @@ mod syscalls;
 use core::str;
 mod vmlinux;
 
+use aya_bpf::cty::c_long;
 use aya_bpf::helpers::{
     bpf_get_current_task, bpf_get_current_task_btf, bpf_probe_read_kernel_str_bytes,
     bpf_probe_read_user_str_bytes,
@@ -43,7 +44,7 @@ enum SyscallType {
 //static mut READ_FROM_USERSPACE_BUFFER: PerCpuArray<[u8;2048]> = PerCpuArray::with_max_entries(1, 0);
 
 #[tracepoint]
-pub fn fs_tracer_enter(ctx: TracePointContext) -> u32 {
+pub fn fs_tracer_enter(ctx: TracePointContext) -> c_long {
     match try_fs_tracer(ctx, SyscallType::Enter) {
         Ok(ret) => ret,
         Err(ret) => ret,
@@ -51,7 +52,7 @@ pub fn fs_tracer_enter(ctx: TracePointContext) -> u32 {
 }
 
 #[tracepoint]
-pub fn fs_tracer_exit(ctx: TracePointContext) -> u32 {
+pub fn fs_tracer_exit(ctx: TracePointContext) -> c_long {
     //info!(&ctx, "Hi");
     match try_fs_tracer(ctx, SyscallType::Exit) {
         Ok(ret) => ret,
@@ -66,7 +67,7 @@ fn ptr_at<T>(ctx: &TracePointContext, offset: usize) -> Option<*const T> {
     Some(unsafe { start.add(offset) } as *const T)
 }
 
-fn try_fs_tracer(ctx: TracePointContext, syscall_type: SyscallType) -> Result<u32, u32> {
+fn try_fs_tracer(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
     let syscall_nr = unsafe { *ptr_at::<i32>(&ctx, 8).unwrap() };
     //info!( &ctx, "syscall_nr: {}", syscall_nr);
 
@@ -87,7 +88,7 @@ fn handle_syscall(
     ctx: TracePointContext,
     syscall_nr: i32,
     syscall_type: SyscallType,
-) -> Result<u32, u32> {
+) -> Result<c_long, c_long> {
     match syscall_nr {
         1 => syscalls::write::handle_sys_write(ctx, syscall_type),
         257 => syscalls::open::handle_sys_open(ctx, syscall_type),

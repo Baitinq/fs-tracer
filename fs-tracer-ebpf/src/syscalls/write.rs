@@ -1,13 +1,13 @@
 use crate::*;
 
-pub fn handle_sys_write(ctx: TracePointContext, syscall_type: SyscallType) -> Result<u32, u32> {
+pub fn handle_sys_write(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
     match syscall_type {
         SyscallType::Enter => unsafe { handle_sys_write_enter(ctx) },
         SyscallType::Exit => unsafe { handle_sys_write_exit(ctx) },
     }
 }
 
-unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<u32, u32> {
+unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_long> {
     // info!(&ctx, "handle_sys_write start");
     #[derive(Clone, Copy)]
     struct WriteSyscallArgs {
@@ -45,7 +45,7 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<u32, u32> {
     Ok(0)
 }
 
-unsafe fn handle_sys_write_exit(ctx: TracePointContext) -> Result<u32, u32> {
+unsafe fn handle_sys_write_exit(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_write_exit start");
     let ret = *ptr_at::<i64>(&ctx, 16).unwrap_unchecked(); //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
