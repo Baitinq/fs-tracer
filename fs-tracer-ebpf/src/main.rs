@@ -52,7 +52,7 @@ pub fn fs_tracer_enter(ctx: TracePointContext) -> u32 {
 
 #[tracepoint]
 pub fn fs_tracer_exit(ctx: TracePointContext) -> u32 {
-    info!(&ctx, "Hi");
+    //info!(&ctx, "Hi");
     match try_fs_tracer(ctx, SyscallType::Exit) {
         Ok(ret) => ret,
         Err(ret) => ret,

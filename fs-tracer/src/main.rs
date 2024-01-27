@@ -49,7 +49,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let trace_exits_program: &mut TracePoint = bpf.program_mut("fs_tracer_exit").unwrap().try_into()?;
     trace_exits_program.load()?;
-    trace_exits_program.attach("syscalls", "sys_exit_open")?;
+    trace_exits_program.attach("syscalls", "sys_exit_openat")?;
     //program2.attach("syscalls", "sys_exit_write")?;
 
     println!("Num of cpus: {}", online_cpus()?.len());
