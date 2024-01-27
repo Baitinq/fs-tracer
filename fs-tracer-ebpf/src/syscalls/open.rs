@@ -1,13 +1,14 @@
 
-use core::{mem, ptr};
+use core::{mem::{self, size_of}, ptr};
 
 use aya_bpf::{helpers::{bpf_d_path, bpf_probe_read, bpf_probe_read_kernel, gen}, cty::{c_void, c_long}, maps::PerCpuArray};
 
 use crate::{*, vmlinux::files_struct};
+use crate::vmlinux::file;
 
 #[repr(C)]
 pub struct Buffer {
-    pub buf: [u8; 4096],
+    pub buf: [u8; 8192],
 }
 
 #[map]
@@ -23,13 +24,15 @@ pub fn handle_sys_open(ctx: TracePointContext, syscall_type: SyscallType) -> Res
 
 unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_open_enter start");
-    let x = bpf_get_current_task_btf() as *const task_struct;
-    let pid = (*x).fs as *const fs_struct;
+    let mut task = bpf_get_current_task_btf() as *mut task_struct;
+
+    //info!(&ctx, "test: {}", (*files).next_fd);
+    let pid = (*task).fs as *const fs_struct;
     let uwu = (*pid).pwd;
     let ra = uwu.dentry as *const dentry;
     let ma = str::from_utf8_unchecked(&(*ra).d_iname);
-    let buf = unsafe {
-        let ptr = BUF.get_ptr_mut(0).ok_or(0)?;
+     let buf = unsafe {
+        let ptr = BUF.get_ptr_mut(0).ok_or(1)?;
         &mut *ptr
     };
 
@@ -54,11 +57,21 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         let fdt = (*files).fdt;
         let fdd = (*fdt).fd;*/
         info!(&ctx, "pid from ctx: {}", ctx.pid());
-        info!(&ctx, "pid from task {}", (*x).pid);
-        //let x_addr = &x as *const _ as usize;
-        //info!(&ctx, "x_addr: {}", x_addr);
-       // let good_files = bpf_probe_read_kernel(&(*x).files).unwrap_unchecked();
-        //info!(&ctx, "test: {}", (*good_files).next_fd)
+        info!(&ctx, "pid from task {}", (*task).pid);
+
+        let files = bpf_probe_read_kernel(&(*task).files)?;
+        let fdt = bpf_probe_read_kernel(&(*files).fdt)?;
+        let fdarr = bpf_probe_read_kernel(&(*fdt).fd)?;
+        info!(&ctx, "wuit: {}", args.dfd as isize);
+        info!(&ctx, "test: {}", ctx.read_at::<u16>(16).unwrap_unchecked());
+        let fd = bpf_probe_read_kernel(&(*fdarr.offset(3)))?; //todo: get good fd here. lets add a progrtam to test. shellcode.
+        let mut deb = bpf_probe_read_kernel(&(*fd).f_path)?;
+        let rwada = bpf_probe_read_kernel(&deb.dentry)?;
+        let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf.buf)?;
+        let xaxwaxa = str::from_utf8_unchecked(iname);
+        
+        info!(&ctx, "DEBUGGG: {}", xaxwaxa);
+        info!(&ctx, "dawdwawd");
         /*let file = (*fdd).add(args.dfd as usize * 8);
         let mut pat = (*file).f_path;
         //info!(&ctx, "path: {}", &pat)
@@ -78,7 +91,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     }
 
 
-    let filename = unsafe {
+    /*let filename = unsafe {
         core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
             args.filename as *const u8,
             &mut buf.buf,
@@ -88,11 +101,11 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     info!(
         &ctx,
         "Tf {} {} dfd: {}",
-        ma,
+        2,//ma
         filename,
         args.dfd
     );
- 
+ */
     Ok(0)
 }
 
