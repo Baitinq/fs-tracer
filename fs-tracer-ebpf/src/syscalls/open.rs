@@ -1,7 +1,7 @@
 
 use core::{mem::{self, size_of}, ptr};
 
-use aya_bpf::{helpers::{bpf_d_path, bpf_probe_read, bpf_probe_read_kernel, gen}, cty::{c_void, c_long}, maps::PerCpuArray};
+use aya_bpf::{helpers::{bpf_d_path, bpf_probe_read, bpf_probe_read_kernel, gen}, cty::{c_char, c_int, c_long, c_void}, maps::PerCpuArray};
 
 use crate::{*, vmlinux::files_struct};
 use crate::vmlinux::file;
@@ -36,11 +36,12 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         &mut *ptr
     };
 
+    #[repr(C)]
     #[derive(Clone, Copy)]
     struct OpenAtSyscallArgs {
-        dfd: i64,
-        filename: *const u8,
-        flags: u64,
+        dfd: c_int,
+        filename: *const c_char,
+        flags: c_int,
         mode: u64,
     }
 
@@ -50,21 +51,29 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
     if args.dfd == -100 {
         info!(&ctx, "relative call!");
+        //TODO: Get current working dir
+        let fs = bpf_probe_read_kernel(&(*task).fs)?;
+        let pwd = bpf_probe_read_kernel(&(*fs).pwd)?;
+       let rwada = bpf_probe_read_kernel(&pwd.dentry)?;
+        let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf.buf)?;
+        let xaxwaxa = str::from_utf8_unchecked(iname);
+        
+        info!(&ctx, "DEBUGGG: {}", xaxwaxa);
     }
     else {
         info!(&ctx, "not relative call!");
           /*   let files = (*x).files;
         let fdt = (*files).fdt;
         let fdd = (*fdt).fd;*/
-        info!(&ctx, "pid from ctx: {}", ctx.pid());
-        info!(&ctx, "pid from task {}", (*task).pid);
+        //info!(&ctx, "pid from ctx: {}", ctx.pid());
+        //info!(&ctx, "pid from task {}", (*task).pid);
 
         let files = bpf_probe_read_kernel(&(*task).files)?;
         let fdt = bpf_probe_read_kernel(&(*files).fdt)?;
         let fdarr = bpf_probe_read_kernel(&(*fdt).fd)?;
-        info!(&ctx, "wuit: {}", args.dfd as isize);
-        info!(&ctx, "test: {}", ctx.read_at::<u16>(16).unwrap_unchecked());
-        let fd = bpf_probe_read_kernel(&(*fdarr.offset(3)))?; //todo: get good fd here. lets add a progrtam to test. shellcode.
+        info!(&ctx, "wuit: {}", args.dfd);
+        info!(&ctx, "test: {}", ctx.read_at::<c_int>(16).unwrap_unchecked());
+        let fd = bpf_probe_read_kernel(&(*fdarr.offset(3)))?; //todo: get good fd here. conclusion, somehow we are getting the wrong fd. unsigned int?? but its signed idk
         let mut deb = bpf_probe_read_kernel(&(*fd).f_path)?;
         let rwada = bpf_probe_read_kernel(&deb.dentry)?;
         let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf.buf)?;
@@ -91,7 +100,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     }
 
 
-    /*let filename = unsafe {
+    let filename = unsafe {
         core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
             args.filename as *const u8,
             &mut buf.buf,
@@ -105,7 +114,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         filename,
         args.dfd
     );
- */
+ 
     Ok(0)
 }
 

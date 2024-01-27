@@ -40,9 +40,6 @@ enum SyscallType {
     Exit,
 }
 
-//#[map]
-//static mut READ_FROM_USERSPACE_BUFFER: PerCpuArray<[u8;2048]> = PerCpuArray::with_max_entries(1, 0);
-
 #[tracepoint]
 pub fn fs_tracer_enter(ctx: TracePointContext) -> c_long {
     match try_fs_tracer(ctx, SyscallType::Enter) {
@@ -59,6 +56,7 @@ pub fn fs_tracer_exit(ctx: TracePointContext) -> c_long {
         Err(ret) => ret,
     }
 }
+
 
 #[inline(always)]
 fn ptr_at<T>(ctx: &TracePointContext, offset: usize) -> Option<*const T> {

@@ -28,6 +28,7 @@
             })
             trunk
 	    bpftools
+	    bpftrace
 	    llvmPackages_11.libclang.lib
           ];
 	  shellHook = ''
