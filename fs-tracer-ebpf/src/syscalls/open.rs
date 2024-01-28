@@ -1,14 +1,15 @@
 
 use core::{mem::{self, size_of}, ptr};
 
-use aya_bpf::{helpers::{bpf_d_path, bpf_probe_read, bpf_probe_read_kernel, gen}, cty::{c_char, c_int, c_long, c_void}, maps::PerCpuArray};
+use aya_bpf::{helpers::{bpf_probe_read_kernel, gen}, cty::{c_char, c_int, c_long, c_void}, maps::PerCpuArray};
 
-use crate::{*, vmlinux::files_struct};
-use crate::vmlinux::file;
+use crate::{*, vmlinux::{files_struct, umode_t}};
+const AT_FDCWD: c_int = -100;
+const MAX_PATH: usize = 4096;
 
 #[repr(C)]
 pub struct Buffer {
-    pub buf: [u8; 8192],
+    pub buf: [u8; MAX_PATH],
 }
 
 #[map]
@@ -31,10 +32,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     let uwu = (*pid).pwd;
     let ra = uwu.dentry as *const dentry;
     let ma = str::from_utf8_unchecked(&(*ra).d_iname);
-     let buf = unsafe {
-        let ptr = BUF.get_ptr_mut(0).ok_or(1)?;
-        &mut *ptr
-    };
+    let buf = get_buf()?;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -42,25 +40,35 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         dfd: c_int,
         filename: *const c_char,
         flags: c_int,
-        mode: u64,
+        mode: umode_t,
     }
 
     //TODO: Check if the flags is relative
 
     let args = *ptr_at::<OpenAtSyscallArgs>(&ctx, 16).unwrap_unchecked();
 
-    if args.dfd == -100 {
+    if args.dfd == AT_FDCWD {
         info!(&ctx, "relative call!");
-        //TODO: Get current working dir
-        let fs = bpf_probe_read_kernel(&(*task).fs)?;
-        let pwd = bpf_probe_read_kernel(&(*fs).pwd)?;
-       let rwada = bpf_probe_read_kernel(&pwd.dentry)?;
-        let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf.buf)?;
-        let xaxwaxa = str::from_utf8_unchecked(iname);
+        let pwd = get_task_pwd(task)?;
         
-        info!(&ctx, "DEBUGGG: {}", xaxwaxa);
+        info!(&ctx, "DEBUGGG: {}", pwd);
+
+        let filename = unsafe {
+            core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
+                args.filename as *const u8,
+                &mut buf.buf,
+            ).unwrap_unchecked())
+        };
+
+        info!(
+            &ctx,
+            "Tf {} {} dfd: {}",
+            2,//ma
+            filename,
+            args.dfd
+        );
     }
-    else {
+   /*else {
         info!(&ctx, "not relative call!");
           /*   let files = (*x).files;
         let fdt = (*files).fdt;
@@ -97,23 +105,10 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         let aa = core::slice::from_raw_parts(xxxx, 10);
         info!(&ctx, "dawdwa: {}", str::from_utf8_unchecked(aa))*/
         //let filename = bpf_probe_read_kernel_str_bytes(xxxx.name, &mut huh);
-    }
+    }*/
 
 
-    let filename = unsafe {
-        core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
-            args.filename as *const u8,
-            &mut buf.buf,
-        ).unwrap_unchecked())
-    };
 
-    info!(
-        &ctx,
-        "Tf {} {} dfd: {}",
-        2,//ma
-        filename,
-        args.dfd
-    );
  
     Ok(0)
 }
@@ -132,4 +127,22 @@ unsafe fn handle_sys_open_exit(ctx: TracePointContext) -> Result<c_long, c_long>
     }
 
     Err(0)
+}
+
+unsafe fn get_task_pwd<'a>(task: *const task_struct) -> Result<&'a str, i64> {
+    let buf2 = get_buf()?;
+    let fs = bpf_probe_read_kernel(&(*task).fs)?;
+    let pwd = bpf_probe_read_kernel(&(*fs).pwd)?;
+   let rwada = bpf_probe_read_kernel(&pwd.dentry)?;
+    let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf2.buf)?;
+    let xaxwaxa = str::from_utf8_unchecked(iname);
+    Ok(xaxwaxa)
+}
+
+unsafe fn get_buf<'a>() -> Result<&'a mut Buffer, i64>{
+    let buf = unsafe {
+        let ptr = BUF.get_ptr_mut(0).ok_or(1)?;
+        &mut *ptr
+    };
+    Ok(buf)
 }
