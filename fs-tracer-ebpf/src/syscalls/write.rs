@@ -1,3 +1,6 @@
+use core::ffi::c_size_t;
+use aya_bpf::{cty::{c_char, c_uint}, helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}};
+
 use crate::*;
 
 pub fn handle_sys_write(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
@@ -11,11 +14,11 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_lon
     // info!(&ctx, "handle_sys_write start");
     #[derive(Clone, Copy)]
     struct WriteSyscallArgs {
-        fd: u64,
-        buf: *const u8,
-        count: u64,
+        fd: c_uint,
+        buf: *const c_char,
+        count: c_size_t,
     }
-    let args = *ptr_at::<WriteSyscallArgs>(&ctx, 16).unwrap_unchecked();
+    let args = ctx.read_at::<WriteSyscallArgs>(16)?;
 
     // if fd is stdout, stderr or stdin, ignore
     if args.fd <= 2 {
@@ -23,7 +26,7 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_lon
     }
 
     let mut buf = [0u8; 96]; //we need to make this muuuuuch bigger, we could use some sync with a bpf ds
-    let _ = bpf_probe_read_user_str_bytes(args.buf, &mut buf);
+    let _ = bpf_probe_read_user_str_bytes(args.buf as *const u8, &mut buf);
     let buf_ref = &buf;
 
     let mut anotherbuf = [0u8; 96];
@@ -47,7 +50,7 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_lon
 
 unsafe fn handle_sys_write_exit(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_write_exit start");
-    let ret = *ptr_at::<i64>(&ctx, 16).unwrap_unchecked(); //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
+    let ret = ctx.read_at::<c_long>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
     let tgid = ctx.tgid();
     if let Some(syscall) = SYSCALL_ENTERS.get(&tgid) {

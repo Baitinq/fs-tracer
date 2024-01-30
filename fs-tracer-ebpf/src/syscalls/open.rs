@@ -1,8 +1,7 @@
+use aya_bpf::{helpers::{bpf_get_current_task_btf, bpf_probe_read_kernel, bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}, cty::{c_char, c_int, c_long}, maps::PerCpuArray};
 
+use crate::{*, vmlinux::{task_struct, umode_t}};
 
-use aya_bpf::{helpers::{bpf_probe_read_kernel, gen}, cty::{c_char, c_int, c_long, c_void}, maps::PerCpuArray};
-
-use crate::{*, vmlinux::umode_t};
 const AT_FDCWD: c_int = -100;
 const MAX_PATH: usize = 4096;
 
@@ -29,13 +28,6 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     //info!(&ctx, "handle_sys_open_enter start");
     let mut task = bpf_get_current_task_btf() as *mut task_struct;
 
-    //info!(&ctx, "test: {}", (*files).next_fd);
-    let pid = (*task).fs as *const fs_struct;
-    let uwu = (*pid).pwd;
-    let ra = uwu.dentry as *const dentry;
-    let ma = str::from_utf8_unchecked(&(*ra).d_iname);
-    let buf = get_buf(&PATH_BUF)?;
-
     #[repr(C)]
     #[derive(Clone, Copy)]
     struct OpenAtSyscallArgs {
@@ -45,7 +37,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         mode: umode_t,
     }
 
-    let args = *ptr_at::<OpenAtSyscallArgs>(&ctx, 16).unwrap_unchecked();
+    let args = ctx.read_at::<OpenAtSyscallArgs>(16)?;
 
     if args.dfd != AT_FDCWD {
         return Err(1)
@@ -56,6 +48,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     
     info!(&ctx, "PWD: {}", pwd);
     
+    let buf = get_buf(&PATH_BUF)?;
     let filename = unsafe {
         core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
             args.filename as *const u8,
@@ -75,7 +68,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
 unsafe fn handle_sys_open_exit(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_open_exit start");
-    let ret = *ptr_at::<i64>(&ctx, 16).unwrap_unchecked(); //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
+    let ret = ctx.read_at::<c_long>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
     let tgid = ctx.tgid();
     if let Some(syscall) = SYSCALL_ENTERS.get(&tgid) {

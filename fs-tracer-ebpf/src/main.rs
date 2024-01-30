@@ -1,16 +1,13 @@
 #![no_std]
 #![no_main]
+#![feature(c_size_t)]
 
-use core::fmt::Error;
-mod syscalls;
-use core::str;
+#![allow(warnings, unused)]
 mod vmlinux;
+mod syscalls;
 
-use aya_bpf::cty::c_long;
-use aya_bpf::helpers::{
-    bpf_get_current_task, bpf_get_current_task_btf, bpf_probe_read_kernel_str_bytes,
-    bpf_probe_read_user_str_bytes,
-};
+use core::str;
+use aya_bpf::cty::{c_int, c_long};
 use aya_bpf::maps::HashMap;
 use aya_bpf::{
     macros::{map, tracepoint},
@@ -20,7 +17,6 @@ use aya_bpf::{
 };
 use aya_log_ebpf::info;
 use fs_tracer_common::{SyscallInfo, WriteSyscallBPF};
-use vmlinux::{dentry, fs_struct, path, task_struct};
 
 #[map]
 static EVENTS: PerfEventArray<SyscallInfo> = PerfEventArray::with_max_entries(24, 0);
@@ -33,8 +29,6 @@ static EVENTS: PerfEventArray<SyscallInfo> = PerfEventArray::with_max_entries(24
 #[map]
 static SYSCALL_ENTERS: HashMap<u32, SyscallInfo> = HashMap::with_max_entries(24, 0);
 
-//TODO: Clean up code. Generics. Arbitrary length buffer? https://github.com/elbaro/mybee/blob/fe037927b848cdbe399c0b0730ae79400cf95279/mybee-ebpf/src/main.rs#L29
-
 enum SyscallType {
     Enter,
     Exit,
@@ -44,7 +38,7 @@ enum SyscallType {
 pub fn fs_tracer_enter(ctx: TracePointContext) -> c_long {
     match try_fs_tracer(ctx, SyscallType::Enter) {
         Ok(ret) => ret,
-        Err(ret) => ret,
+        Err(ret) => -ret,
     }
 }
 
@@ -53,38 +47,19 @@ pub fn fs_tracer_exit(ctx: TracePointContext) -> c_long {
     //info!(&ctx, "Hi");
     match try_fs_tracer(ctx, SyscallType::Exit) {
         Ok(ret) => ret,
-        Err(ret) => ret,
+        Err(ret) => -ret,
     }
 }
 
-
-#[inline(always)]
-fn ptr_at<T>(ctx: &TracePointContext, offset: usize) -> Option<*const T> {
-    let start = ctx.as_ptr(); //maybe try using the  bpf_probe_read here to see if we can use result of that to know the type of the syscall
-
-    Some(unsafe { start.add(offset) } as *const T)
-}
-
 fn try_fs_tracer(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
-    let syscall_nr = unsafe { *ptr_at::<i32>(&ctx, 8).unwrap() };
-    //info!( &ctx, "syscall_nr: {}", syscall_nr);
+    let syscall_nr = unsafe { ctx.read_at::<c_int>(8)? } ;
 
-    //let typee = unsafe { *(cmd.as_ptr().add(0)  as *const u16)};
-    //let typee = ctx.read_at(0)
-
-    /* let a: [u64; 1] = [0u64; 1];
-       let ret = unsafe { bpf_probe_read(a.as_ptr() as *mut c_void, 8, ctx.as_ptr().add(0) as *const c_void)}; //TODO: Maybe we can try reading some high btis to get the type of the syscall exit or enter
-       info!(&ctx, "ret: {}", ret);
-    info!(&ctx, "x: {}", unsafe {a[0]});
-       info!(&ctx, "syscall_nr: {}", syscall_nr);*/
-    //info!(&ctx, "type: {}", typee);
-    //return Ok(1);
     handle_syscall(ctx, syscall_nr, syscall_type)
 }
 
 fn handle_syscall(
     ctx: TracePointContext,
-    syscall_nr: i32,
+    syscall_nr: c_int,
     syscall_type: SyscallType,
 ) -> Result<c_long, c_long> {
     match syscall_nr {
