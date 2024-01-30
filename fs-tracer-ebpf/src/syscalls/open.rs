@@ -1,19 +1,21 @@
 
-use core::{mem::{self, size_of}, ptr};
 
 use aya_bpf::{helpers::{bpf_probe_read_kernel, gen}, cty::{c_char, c_int, c_long, c_void}, maps::PerCpuArray};
 
-use crate::{*, vmlinux::{files_struct, umode_t}};
+use crate::{*, vmlinux::umode_t};
 const AT_FDCWD: c_int = -100;
 const MAX_PATH: usize = 4096;
 
 #[repr(C)]
-pub struct Buffer {
+pub struct Buffer<> {
     pub buf: [u8; MAX_PATH],
 }
 
 #[map]
-static mut BUF: PerCpuArray<Buffer> = PerCpuArray::with_max_entries(1, 0);
+static mut PATH_BUF: PerCpuArray<Buffer> = PerCpuArray::with_max_entries(1, 0);
+
+#[map]
+static mut TMP_BUF: PerCpuArray<Buffer> = PerCpuArray::with_max_entries(1, 0);
 
 pub fn handle_sys_open(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
     //info!(&ctx, "called");
@@ -32,7 +34,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     let uwu = (*pid).pwd;
     let ra = uwu.dentry as *const dentry;
     let ma = str::from_utf8_unchecked(&(*ra).d_iname);
-    let buf = get_buf()?;
+    let buf = get_buf(&PATH_BUF)?;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -43,72 +45,30 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         mode: umode_t,
     }
 
-    //TODO: Check if the flags is relative
-
     let args = *ptr_at::<OpenAtSyscallArgs>(&ctx, 16).unwrap_unchecked();
 
-    if args.dfd == AT_FDCWD {
-        info!(&ctx, "relative call!");
-        let pwd = get_task_pwd(task)?;
-        
-        info!(&ctx, "DEBUGGG: {}", pwd);
-
-        let filename = unsafe {
-            core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
-                args.filename as *const u8,
-                &mut buf.buf,
-            ).unwrap_unchecked())
-        };
-
-        info!(
-            &ctx,
-            "Tf {} {} dfd: {}",
-            2,//ma
-            filename,
-            args.dfd
-        );
+    if args.dfd != AT_FDCWD {
+        return Err(1)
     }
-   /*else {
-        info!(&ctx, "not relative call!");
-          /*   let files = (*x).files;
-        let fdt = (*files).fdt;
-        let fdd = (*fdt).fd;*/
-        //info!(&ctx, "pid from ctx: {}", ctx.pid());
-        //info!(&ctx, "pid from task {}", (*task).pid);
 
-        let files = bpf_probe_read_kernel(&(*task).files)?;
-        let fdt = bpf_probe_read_kernel(&(*files).fdt)?;
-        let fdarr = bpf_probe_read_kernel(&(*fdt).fd)?;
-        info!(&ctx, "wuit: {}", args.dfd);
-        info!(&ctx, "test: {}", ctx.read_at::<c_int>(16).unwrap_unchecked());
-        let fd = bpf_probe_read_kernel(&(*fdarr.offset(3)))?; //todo: get good fd here. conclusion, somehow we are getting the wrong fd. unsigned int?? but its signed idk
-        let mut deb = bpf_probe_read_kernel(&(*fd).f_path)?;
-        let rwada = bpf_probe_read_kernel(&deb.dentry)?;
-        let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf.buf)?;
-        let xaxwaxa = str::from_utf8_unchecked(iname);
-        
-        info!(&ctx, "DEBUGGG: {}", xaxwaxa);
-        info!(&ctx, "dawdwawd");
-        /*let file = (*fdd).add(args.dfd as usize * 8);
-        let mut pat = (*file).f_path;
-        //info!(&ctx, "path: {}", &pat)
-        let aya_bpf_path_ptr: *mut aya_bpf::bindings::path = unsafe {
-            mem::transmute::<&mut vmlinux::path, *mut aya_bpf::bindings::path>(&mut pat)
-        };
+    info!(&ctx, "relative call!");
+    let pwd = get_task_pwd(&ctx, task)?;
+    
+    info!(&ctx, "PWD: {}", pwd);
+    
+    let filename = unsafe {
+        core::str::from_utf8_unchecked(bpf_probe_read_user_str_bytes(
+            args.filename as *const u8,
+            &mut buf.buf,
+        ).unwrap_unchecked())
+    };
 
-        let mut buff = [0i8; 120];
-    bpf_d_path( aya_bpf_path_ptr , &mut buff as *mut i8, 120);*/
-
-        /*let pathname = pat.dentry;
-        let mut huh = [0u8; 64];
-        let xxxx = (*pathname).d_name.name;
-        let aa = core::slice::from_raw_parts(xxxx, 10);
-        info!(&ctx, "dawdwa: {}", str::from_utf8_unchecked(aa))*/
-        //let filename = bpf_probe_read_kernel_str_bytes(xxxx.name, &mut huh);
-    }*/
-
-
-
+    info!(
+        &ctx,
+        "filename: {} dfd: {}",
+        filename,
+        args.dfd
+    );
  
     Ok(0)
 }
@@ -129,20 +89,37 @@ unsafe fn handle_sys_open_exit(ctx: TracePointContext) -> Result<c_long, c_long>
     Err(0)
 }
 
-unsafe fn get_task_pwd<'a>(task: *const task_struct) -> Result<&'a str, i64> {
-    let buf2 = get_buf()?;
+unsafe fn get_task_pwd<'a>(ctx: &TracePointContext, task: *const task_struct) -> Result<&'a str, c_long> {
+    let result = get_buf(&PATH_BUF)?;
     let fs = bpf_probe_read_kernel(&(*task).fs)?;
     let pwd = bpf_probe_read_kernel(&(*fs).pwd)?;
-   let rwada = bpf_probe_read_kernel(&pwd.dentry)?;
-    let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut buf2.buf)?;
-    let xaxwaxa = str::from_utf8_unchecked(iname);
-    Ok(xaxwaxa)
+    let rwada = bpf_probe_read_kernel(&pwd.dentry)?;
+    let tmp_buf = get_buf(&TMP_BUF)?;
+    let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut tmp_buf.buf)?;
+    for i in 0..iname.len() {
+        *result.buf.as_mut_ptr().add(i) = iname[i];
+    }
+    *result.buf.as_mut_ptr().add(iname.len()) = 0; //idk why we have to index like this
+
+    Ok(str_from_u8_nul_utf8_unchecked(&result.buf))
 }
 
-unsafe fn get_buf<'a>() -> Result<&'a mut Buffer, i64>{
-    let buf = unsafe {
-        let ptr = BUF.get_ptr_mut(0).ok_or(1)?;
-        &mut *ptr
-    };
-    Ok(buf)
+unsafe fn get_buf<'a>(buf: &PerCpuArray<Buffer>) -> Result<&'a mut Buffer, i64>{
+    let ptr = buf.get_ptr_mut(0).ok_or(1)?;
+    Ok(&mut *ptr)
+}
+
+unsafe fn str_from_u8_nul_utf8_unchecked(utf8_src: &[u8]) -> &str {
+    let mut nul_range_end = utf8_src.len();
+    for i in 0..utf8_src.len() {
+        if i > 200 { //satisfy the verifier
+            break;
+        }
+        if utf8_src[i] == b'\0' {
+            nul_range_end = i;
+            break;
+        }
+    }
+
+    str::from_utf8_unchecked(&utf8_src[0..nul_range_end])
 }
