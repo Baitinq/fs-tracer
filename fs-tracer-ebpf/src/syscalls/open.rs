@@ -1,4 +1,4 @@
-use aya_bpf::{helpers::{bpf_get_current_task_btf, bpf_probe_read_kernel, bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}, cty::{c_char, c_int, c_long}, maps::PerCpuArray};
+use aya_bpf::{helpers::{bpf_get_current_task_btf, bpf_probe_read_kernel, bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes, bpf_tail_call}, cty::{c_char, c_int, c_long}, maps::PerCpuArray};
 
 use crate::{*, vmlinux::{task_struct, umode_t}};
 
@@ -79,20 +79,42 @@ unsafe fn handle_sys_open_exit(ctx: TracePointContext) -> Result<c_long, c_long>
         return Ok(0);
     }
 
+    //bpf_tail_call(ctx, prog_array_map, index) //what is this
     Err(0)
 }
 
 unsafe fn get_task_pwd<'a>(ctx: &TracePointContext, task: *const task_struct) -> Result<&'a str, c_long> {
     let result = get_buf(&PATH_BUF)?;
+    let tmp_buf: &mut Buffer = get_buf(&TMP_BUF)?;
     let fs = bpf_probe_read_kernel(&(*task).fs)?;
-    let pwd = bpf_probe_read_kernel(&(*fs).pwd)?;
-    let rwada = bpf_probe_read_kernel(&pwd.dentry)?;
-    let tmp_buf = get_buf(&TMP_BUF)?;
-    let iname = bpf_probe_read_kernel_str_bytes(&(*rwada).d_iname as *const u8, &mut tmp_buf.buf)?;
-    for i in 0..iname.len() {
-        *result.buf.as_mut_ptr().add(i) = iname[i];
+    let pwd: vmlinux::path = bpf_probe_read_kernel(&(*fs).pwd)?;
+    let mut prev_dentry = bpf_probe_read_kernel(&pwd.dentry)?;
+    let mut dentry = prev_dentry;
+    let mut iters: usize = 0;
+    let mut num_chars: usize = 0;
+    loop {
+        info!(ctx, "num_chars: {}", num_chars);
+
+        let iname = bpf_probe_read_kernel_str_bytes(&(*dentry).d_iname as *const u8, &mut tmp_buf.buf)?;
+        if iname.len() > 40 {
+            break
+        }
+
+        *result.buf.as_mut_ptr().add(num_chars) = '/' as u8;
+        num_chars+=1;
+        for i in 0..iname.len() {
+            *result.buf.as_mut_ptr().add(num_chars) = iname[i]; //we shouldnt append but prepend
+            num_chars+=1;
+        }
+        
+        iters += 1;
+        prev_dentry = dentry;
+        dentry = bpf_probe_read_kernel(&(*dentry).d_parent)?;
+        if dentry == prev_dentry || iters >= 2 { //TODO: we are running out of instrs
+            break;
+        }
     }
-    *result.buf.as_mut_ptr().add(iname.len()) = 0; //idk why we have to index like this
+    *result.buf.as_mut_ptr().add(num_chars) = 0; //idk why we have to index like this
 
     Ok(str_from_u8_nul_utf8_unchecked(&result.buf))
 }

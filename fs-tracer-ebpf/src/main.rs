@@ -65,14 +65,14 @@ fn handle_syscall(
     match syscall_nr {
         1 => syscalls::write::handle_sys_write(ctx, syscall_type),
         257 => syscalls::open::handle_sys_open(ctx, syscall_type),
-        8 => {
+        /*8 => {
             Ok(0)
             //handle_sys_lseek(ctx);
         }
         3 => {
             Ok(0)
             //handle_sys_close(ctx);
-        }
+        }*/
         _ => {
             info!(&ctx, "unhandled syscall: {}", syscall_nr);
             Err(1)
