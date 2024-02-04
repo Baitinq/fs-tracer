@@ -1,9 +1,15 @@
+use aya_bpf::{
+    cty::{c_char, c_uint},
+    helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes},
+};
 use core::ffi::c_size_t;
-use aya_bpf::{cty::{c_char, c_uint}, helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}};
 
 use crate::*;
 
-pub fn handle_sys_write(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
+pub fn handle_sys_write(
+    ctx: TracePointContext,
+    syscall_type: SyscallType,
+) -> Result<c_long, c_long> {
     match syscall_type {
         SyscallType::Enter => unsafe { handle_sys_write_enter(ctx) },
         SyscallType::Exit => unsafe { handle_sys_write_exit(ctx) },

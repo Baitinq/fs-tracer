@@ -1,14 +1,13 @@
 #![no_std]
 #![no_main]
 #![feature(c_size_t)]
-
 #![allow(warnings, unused)]
-mod vmlinux;
 mod syscalls;
+mod vmlinux;
 
-use core::str;
 use aya_bpf::cty::{c_int, c_long};
-use aya_bpf::maps::HashMap;
+use aya_bpf::helpers::bpf_tail_call;
+use aya_bpf::maps::{HashMap, ProgramArray};
 use aya_bpf::{
     macros::{map, tracepoint},
     maps::PerfEventArray,
@@ -16,7 +15,11 @@ use aya_bpf::{
     BpfContext,
 };
 use aya_log_ebpf::info;
+use core::str;
 use fs_tracer_common::{SyscallInfo, WriteSyscallBPF};
+
+#[map]
+static JUMP_TABLE: ProgramArray = ProgramArray::with_max_entries(16, 0);
 
 #[map]
 static EVENTS: PerfEventArray<SyscallInfo> = PerfEventArray::with_max_entries(24, 0);
@@ -52,19 +55,26 @@ pub fn fs_tracer_exit(ctx: TracePointContext) -> c_long {
 }
 
 fn try_fs_tracer(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
-    let syscall_nr = unsafe { ctx.read_at::<c_int>(8)? } ;
+    let syscall_nr = unsafe { ctx.read_at::<c_int>(8)? };
 
-    handle_syscall(ctx, syscall_nr, syscall_type)
+    unsafe { handle_syscall(ctx, syscall_nr, syscall_type) }
 }
 
-fn handle_syscall(
+unsafe fn handle_syscall(
     ctx: TracePointContext,
     syscall_nr: c_int,
     syscall_type: SyscallType,
 ) -> Result<c_long, c_long> {
     match syscall_nr {
-        1 => syscalls::write::handle_sys_write(ctx, syscall_type),
-        257 => syscalls::open::handle_sys_open(ctx, syscall_type),
+        1 => {
+            //JUMP_TABLE.tail_call(&ctx, 0);
+            syscalls::write::handle_sys_write(ctx, syscall_type)
+        }
+        257 => {
+            JUMP_TABLE.tail_call(&ctx, 0);
+            Ok(0)
+            //syscalls::open::handle_sys_open(ctx, syscall_type)
+        }
         /*8 => {
             Ok(0)
             //handle_sys_lseek(ctx);

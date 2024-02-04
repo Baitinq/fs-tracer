@@ -1,5 +1,5 @@
-use aya::maps::AsyncPerfEventArray;
-use aya::programs::TracePoint;
+use aya::maps::{AsyncPerfEventArray, ProgramArray};
+use aya::programs::{TracePoint, ProgramFd};
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
@@ -39,6 +39,24 @@ async fn main() -> Result<(), anyhow::Error> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
+
+     let mut prog_array = ProgramArray::try_from(bpf.map_mut("JUMP_TABLE").unwrap()).unwrap();
+     let prog_0: &ProgramFd = bpf.program("example_prog_0").unwrap();
+/// let prog_1: &KProbe = bpf.program("example_prog_1")?.try_into()?;
+/// let prog_2: &KProbe = bpf.program("example_prog_2")?.try_into()?;
+///
+ let flags = 0;
+///
+///  bpf_tail_call(JUMP_TABLE, 0) will jump to prog_0
+ prog_array.set(0, prog_0, flags);
+///
+/// // bpf_tail_call(JUMP_TABLE, 1) will jump to prog_1
+/// prog_array.set(1, prog_1, flags);
+///
+/// // bpf_tail_call(JUMP_TABLE, 2) will jump to prog_2
+/// prog_array.set(2, prog_2, flags);
+
+
     let trace_enters_program: &mut TracePoint = bpf.program_mut("fs_tracer_enter").unwrap().try_into()?;
     trace_enters_program.load()?;
     trace_enters_program.attach("syscalls", "sys_enter_openat")?; //TODO: For some reason enter not being called. Try c program or assembly
