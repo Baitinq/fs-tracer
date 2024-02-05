@@ -29,10 +29,10 @@
             trunk
 	    bpftools
 	    bpftrace
-	    llvmPackages_11.libclang.lib
+	    llvmPackages_17.libclang.lib
           ];
 	  shellHook = ''
-    export LIBCLANG_PATH="${pkgs.llvmPackages_11.libclang.lib}/lib"
+    export LIBCLANG_PATH="${pkgs.llvmPackages_17.libclang.lib}/lib"
   '';
         };
       }
