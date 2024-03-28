@@ -1,5 +1,5 @@
 use core::ffi::c_size_t;
-use aya_bpf::{cty::{c_char, c_uint}, helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}};
+use aya_ebpf::{cty::{c_char, c_uint}, helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}};
 
 use crate::*;
 

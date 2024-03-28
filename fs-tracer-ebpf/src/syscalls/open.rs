@@ -1,4 +1,4 @@
-use aya_bpf::{
+use aya_ebpf::{
     cty::{c_char, c_int, c_long},
     helpers::{
         bpf_get_current_task_btf, bpf_probe_read_kernel, bpf_probe_read_kernel_str_bytes,
@@ -68,9 +68,9 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
     info!(&ctx, "filename: {} dfd: {}", filename, args.dfd);
 
-    if !filename.is_empty() && filename.chars().next().unwrap_unchecked() == '/' {
-        return Ok(0);
-    }
+ //   if !filename.is_empty() && filename.chars().next().unwrap_unchecked() == '/' {
+  //      return Ok(0);
+    //}
 
     info!(&ctx, "relative call!");
     let pwd = get_task_pwd(&ctx, task)?;

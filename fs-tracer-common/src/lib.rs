@@ -4,7 +4,7 @@
 use core::ffi::c_uint;
 use core::fmt::{self, Formatter};
 use core::str;
-use aya_bpf::cty::c_long;
+use aya_ebpf::cty::c_long;
 use core::ffi::c_size_t;
 
 pub enum SyscallInfo {

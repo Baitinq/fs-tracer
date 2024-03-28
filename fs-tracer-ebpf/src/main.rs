@@ -7,13 +7,13 @@ mod vmlinux;
 mod syscalls;
 
 use core::str;
-use aya_bpf::cty::{c_int, c_long};
-use aya_bpf::maps::HashMap;
-use aya_bpf::{
+use aya_ebpf::cty::{c_int, c_long};
+use aya_ebpf::maps::HashMap;
+use aya_ebpf::{
     macros::{map, tracepoint},
     maps::PerfEventArray,
     programs::TracePointContext,
-    BpfContext,
+    EbpfContext,
 };
 use aya_log_ebpf::info;
 use fs_tracer_common::{SyscallInfo, WriteSyscallBPF};
