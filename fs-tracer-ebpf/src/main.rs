@@ -1,12 +1,11 @@
 #![no_std]
 #![no_main]
 #![feature(c_size_t)]
-
+#![feature(let_chains)]
 #![allow(warnings, unused)]
-mod vmlinux;
 mod syscalls;
+mod vmlinux;
 
-use core::str;
 use aya_ebpf::cty::{c_int, c_long};
 use aya_ebpf::maps::HashMap;
 use aya_ebpf::{
@@ -16,6 +15,7 @@ use aya_ebpf::{
     EbpfContext,
 };
 use aya_log_ebpf::info;
+use core::str;
 use fs_tracer_common::{SyscallInfo, WriteSyscallBPF};
 
 #[map]
@@ -52,7 +52,7 @@ pub fn fs_tracer_exit(ctx: TracePointContext) -> c_long {
 }
 
 fn try_fs_tracer(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
-    let syscall_nr = unsafe { ctx.read_at::<c_int>(8)? } ;
+    let syscall_nr = unsafe { ctx.read_at::<c_int>(8)? };
 
     handle_syscall(ctx, syscall_nr, syscall_type)
 }

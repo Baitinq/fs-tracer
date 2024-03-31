@@ -1,0 +1,19 @@
+warning: virtual workspace defaulting to `resolver = "1"` despite one or more workspace members being on edition 2021 which implies `resolver = "2"`
+note: to keep the current resolver, specify `workspace.resolver = "1"` in the workspace root's manifest
+note: to use the edition 2021 resolver, specify `workspace.resolver = "2"` in the workspace root's manifest
+note: for more details see https://doc.rust-lang.org/cargo/reference/resolver.html#resolver-versions
+    Finished dev [unoptimized + debuginfo] target(s) in 0.05s
+     Running `target/debug/xtask run`
+   Compiling fs-tracer-common v0.1.0 (/home/baitinq/src/fs-tracer/fs-tracer-common)
+   Compiling fs-tracer-ebpf v0.1.0 (/home/baitinq/src/fs-tracer/fs-tracer-ebpf)
+error[E0308]: mismatched types
+  --> src/syscalls/open.rs:76:36
+   |
+76 |     if filename.as_ptr().add(0) == '/' as u8 {
+   |        ------------------------    ^^^^^^^^^ expected `*const u8`, found `u8`
+   |        |
+   |        expected because this is `*const u8`
+   |
+   = note: expected raw pointer `*const u8`
+                     found type `u8`
+

@@ -1,9 +1,17 @@
+#![feature(let_chains)]
+
+use aya_ebpf::{
+    cty::{c_char, c_uint},
+    helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes},
+};
 use core::ffi::c_size_t;
-use aya_ebpf::{cty::{c_char, c_uint}, helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes}};
 
 use crate::*;
 
-pub fn handle_sys_write(ctx: TracePointContext, syscall_type: SyscallType) -> Result<c_long, c_long> {
+pub fn handle_sys_write(
+    ctx: TracePointContext,
+    syscall_type: SyscallType,
+) -> Result<c_long, c_long> {
     match syscall_type {
         SyscallType::Enter => unsafe { handle_sys_write_enter(ctx) },
         SyscallType::Exit => unsafe { handle_sys_write_exit(ctx) },
@@ -53,8 +61,9 @@ unsafe fn handle_sys_write_exit(ctx: TracePointContext) -> Result<c_long, c_long
     let ret = ctx.read_at::<c_long>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
     let tgid = ctx.tgid();
-    if let Some(syscall) = SYSCALL_ENTERS.get(&tgid) {
-        let SyscallInfo::Write(mut syscall_write) = syscall;
+    if let Some(syscall) = SYSCALL_ENTERS.get(&tgid)
+        && let SyscallInfo::Write(mut syscall_write) = syscall
+    {
         syscall_write.ret = ret;
         EVENTS.output(&ctx, &SyscallInfo::Write(syscall_write), 0);
         let _ = SYSCALL_ENTERS.remove(&tgid);

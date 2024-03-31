@@ -6,6 +6,7 @@ use aya_ebpf::{
     },
     maps::PerCpuArray,
 };
+use fs_tracer_common::OpenSyscallBPF;
 
 use crate::{
     vmlinux::{task_struct, umode_t},
@@ -13,7 +14,7 @@ use crate::{
 };
 
 const AT_FDCWD: c_int = -100;
-const MAX_PATH: usize = 4096;
+const MAX_PATH: usize = 96; //TODO: 4096
 
 #[repr(C)]
 pub struct Buffer {
@@ -39,7 +40,6 @@ pub fn handle_sys_open(
 
 unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_open_enter start");
-    let mut task = bpf_get_current_task_btf() as *mut task_struct;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -59,7 +59,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
     // TODO: If the path isnt relative, we already know the full path
 
     let buf = get_buf(&PATH_BUF)?;
-    let filename = unsafe {
+    let filename: &str = unsafe {
         core::str::from_utf8_unchecked(
             bpf_probe_read_user_str_bytes(args.filename as *const u8, &mut buf.buf)
                 .unwrap_unchecked(),
@@ -68,15 +68,43 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
     info!(&ctx, "filename: {} dfd: {}", filename, args.dfd);
 
- //   if !filename.is_empty() && filename.chars().next().unwrap_unchecked() == '/' {
-  //      return Ok(0);
+    if filename.len() < 3 {
+        return Ok(0);
+    }
+
+    //let kbuf = get_buf(&PATH_BUF)?;
+    //info!(&ctx, "count: {}", kbuf.buf.len());
+    let (s, s1) = filename.split_at(0); //tODO this doesnt work
+    if s == "/" {
+        info!(&ctx, "SHIITT AINT RELATIVE BOIIIIIIIIIIIIIIIIIIIIIIII");
+        return Ok(0);
+    } else {
+        info!(&ctx, "relative call! {} {}", s, s1);
+    }
+
+    //TODO
+    //    if filename.get(0).unwrap_unchecked() == '/' {
+    //      return Ok(0);
     //}
 
-    info!(&ctx, "relative call!");
+    let mut task = bpf_get_current_task_btf() as *mut task_struct;
     let pwd = get_task_pwd(&ctx, task)?;
 
     info!(&ctx, "PWD: {}", pwd);
 
+    let tgid: u32 = ctx.tgid();
+    let _ = SYSCALL_ENTERS.insert(
+        &tgid,
+        &SyscallInfo::Open(OpenSyscallBPF {
+            pid: ctx.pid(),
+            dfd: args.dfd,
+            filename: buf.buf,
+            mode: args.mode,
+            flags: args.flags,
+            ret: -9999,
+        }),
+        0,
+    );
     Ok(0)
 }
 
@@ -85,10 +113,11 @@ unsafe fn handle_sys_open_exit(ctx: TracePointContext) -> Result<c_long, c_long>
     let ret = ctx.read_at::<c_long>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
     let tgid = ctx.tgid();
-    if let Some(syscall) = SYSCALL_ENTERS.get(&tgid) {
-        let SyscallInfo::Write(mut syscall_write) = syscall;
-        syscall_write.ret = ret;
-        EVENTS.output(&ctx, &SyscallInfo::Write(syscall_write), 0);
+    if let Some(syscall) = SYSCALL_ENTERS.get(&tgid)
+        && let SyscallInfo::Open(mut syscall_open) = syscall
+    {
+        syscall_open.ret = ret;
+        EVENTS.output(&ctx, &SyscallInfo::Open(syscall_open), 0);
         let _ = SYSCALL_ENTERS.remove(&tgid);
         return Ok(0);
     }
@@ -118,7 +147,7 @@ unsafe fn get_task_pwd<'a>(
             break;
         }
 
-        *result.buf.as_mut_ptr().add(num_chars) = '/' as u8;
+        *result.buf.as_mut_ptr().add(num_chars) = '/' as u8; //TODO: Look at this to get char
         num_chars += 1;
         for i in 0..iname.len() {
             *result.buf.as_mut_ptr().add(num_chars) = iname[i]; //we shouldnt append but prepend
