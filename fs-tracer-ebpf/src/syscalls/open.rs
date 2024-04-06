@@ -92,19 +92,19 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
     info!(&ctx, "PWD: {}", pwd);
 
-    let tgid: u32 = ctx.tgid();
-    let _ = SYSCALL_ENTERS.insert(
-        &tgid,
-        &SyscallInfo::Open(OpenSyscallBPF {
-            pid: ctx.pid(),
-            dfd: args.dfd,
-            filename: buf.buf,
-            mode: args.mode,
-            flags: args.flags,
-            ret: -9999,
-        }),
-        0,
-    );
+    // let tgid: u32 = ctx.tgid();
+    // let _ = SYSCALL_ENTERS.insert(
+    //     &tgid,
+    //     &SyscallInfo::Open(OpenSyscallBPF {
+    //         pid: ctx.pid(),
+    //         dfd: args.dfd,
+    //         filename: buf.buf,
+    //         mode: args.mode,
+    //         flags: args.flags,
+    //         ret: -9999,
+    //     }),
+    //     0,
+    // );
     Ok(0)
 }
 
