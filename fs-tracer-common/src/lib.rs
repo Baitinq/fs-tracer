@@ -8,6 +8,8 @@ use core::ffi::c_uint;
 use core::fmt::{self, Formatter};
 use core::str;
 
+mod vmlinux;
+
 use crate::vmlinux::umode_t;
 
 pub enum SyscallInfo {
