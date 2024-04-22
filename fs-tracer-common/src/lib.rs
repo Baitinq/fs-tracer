@@ -5,6 +5,7 @@ use aya_ebpf::cty::c_long;
 use core::ffi::c_int;
 use core::ffi::c_size_t;
 use core::ffi::c_uint;
+use core::ffi::CStr;
 use core::fmt::{self, Formatter};
 use core::str;
 
@@ -58,7 +59,10 @@ impl fmt::Debug for OpenSyscallBPF {
         f.debug_struct("OpenSyscallBPF")
             .field("pid", &self.pid)
             .field("dfd", &self.dfd)
-            //       .field("filename", &str::from_utf8(&self.filename).unwrap_or(""))
+            .field(
+                "filename",
+                &CStr::from_bytes_until_nul(&self.filename).unwrap_or_default(),
+            )
             .field("flags", &self.flags)
             .field("ret", &self.ret)
             .finish()

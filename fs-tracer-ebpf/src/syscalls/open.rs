@@ -66,7 +66,14 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         )
     };
 
-    info!(&ctx, "filename: {} dfd: {}", filename, args.dfd);
+    info!(
+        &ctx,
+        "filename: {} dfd: {}, flags: {}, pid: {}",
+        filename,
+        args.dfd,
+        args.flags,
+        ctx.pid()
+    );
 
     if filename.len() < 3 {
         return Ok(0);
@@ -74,37 +81,36 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
     //let kbuf = get_buf(&PATH_BUF)?;
     //info!(&ctx, "count: {}", kbuf.buf.len());
-    let (s, s1) = filename.split_at(0); //tODO this doesnt work
-    if s == "/" {
-        info!(&ctx, "SHIITT AINT RELATIVE BOIIIIIIIIIIIIIIIIIIIIIIII");
-        return Ok(0);
-    } else {
-        info!(&ctx, "relative call! {} {}", s, s1);
-    }
-
+    // let (s, s1) = filename.split_at(0); //tODO this doesnt work
+    // if s == "/" {
+    //     // info!(&ctx, "SHIITT AINT RELATIVE BOIIIIIIIIIIIIIIIIIIIIIIII");
+    //     return Ok(0);
+    // } else {
+    //     // info!(&ctx, "relative call! {} {}", s, s1);
+    // }
     //TODO
     //    if filename.get(0).unwrap_unchecked() == '/' {
     //      return Ok(0);
     //}
-
-    let mut task = bpf_get_current_task_btf() as *mut task_struct;
-    let pwd = get_task_pwd(&ctx, task)?;
-
-    info!(&ctx, "PWD: {}", pwd);
-
-    // let tgid: u32 = ctx.tgid();
-    // let _ = SYSCALL_ENTERS.insert(
-    //     &tgid,
-    //     &SyscallInfo::Open(OpenSyscallBPF {
-    //         pid: ctx.pid(),
-    //         dfd: args.dfd,
-    //         filename: buf.buf,
-    //         mode: args.mode,
-    //         flags: args.flags,
-    //         ret: -9999,
-    //     }),
-    //     0,
-    // );
+    // let mut task = bpf_get_current_task_btf() as *mut task_struct;
+    // let pwd = get_task_pwd(&ctx, task)?;
+    //
+    // info!(&ctx, "PWD: {}", pwd);
+    let mut anotherbuf = [0u8; 96];
+    let _ = bpf_probe_read_kernel_str_bytes(buf.buf.as_ptr(), &mut anotherbuf);
+    let tgid: u32 = ctx.tgid();
+    let _ = SYSCALL_ENTERS.insert(
+        &tgid,
+        &SyscallInfo::Open(OpenSyscallBPF {
+            pid: ctx.pid(),
+            dfd: args.dfd,
+            filename: anotherbuf,
+            mode: args.mode,
+            flags: args.flags,
+            ret: -9999,
+        }),
+        0,
+    );
     Ok(0)
 }
 

@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use aya::maps::AsyncPerfEventArray;
 use aya::programs::TracePoint;
 use aya::util::online_cpus;
@@ -42,17 +44,17 @@ async fn main() -> Result<(), anyhow::Error> {
     let trace_enters_program: &mut TracePoint =
         bpf.program_mut("fs_tracer_enter").unwrap().try_into()?;
     trace_enters_program.load()?;
-    trace_enters_program.attach("syscalls", "sys_enter_openat")?; //TODO: For some reason enter not being called. Try c program or assembly
-                                                                  //trace_enters_program.attach("syscalls", "sys_enter_write")?;
-                                                                  // program.attach("syscalls", "sys_exit_write")?;
-                                                                  //trace_enters_program.attach("syscalls", "sys_enter_lseek")?;
-                                                                  //program.attach("syscalls", "sys_enter_close")?;
+    trace_enters_program.attach("syscalls", "sys_enter_openat")?;
+    trace_enters_program.attach("syscalls", "sys_enter_write")?;
+    // program.attach("syscalls", "sys_exit_write")?;
+    //trace_enters_program.attach("syscalls", "sys_enter_lseek")?;
+    //program.attach("syscalls", "sys_enter_close")?;
 
     let trace_exits_program: &mut TracePoint =
         bpf.program_mut("fs_tracer_exit").unwrap().try_into()?;
     trace_exits_program.load()?;
     trace_exits_program.attach("syscalls", "sys_exit_openat")?;
-    //program2.attach("syscalls", "sys_exit_write")?;
+    trace_exits_program.attach("syscalls", "sys_exit_write")?;
 
     println!("Num of cpus: {}", online_cpus()?.len());
 
@@ -71,8 +73,19 @@ async fn main() -> Result<(), anyhow::Error> {
                     let ptr = buf.as_ptr() as *const SyscallInfo;
                     let data = unsafe { ptr.read_unaligned() };
                     match data {
-                        SyscallInfo::Write(x) => println!("WRITE KERNEL: DATA {:?}", x),
-                        SyscallInfo::Open(x) => println!("OPEN KERNEL DATA: {:?}", x),
+                        SyscallInfo::Write(x) => {
+                            println!("WRITE KERNEL: DATA {:?}", x)
+                        }
+                        SyscallInfo::Open(x) => {
+                            // if !CStr::from_bytes_until_nul(&x.filename)
+                            //     .unwrap_or_default()
+                            //     .to_str()
+                            //     .unwrap_or_default()
+                            //     .starts_with('/')
+                            // {
+                            println!("OPEN KERNEL DATA: {:?}", x)
+                            // }
+                        }
                     }
                 }
             }
@@ -85,4 +98,3 @@ async fn main() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
-
