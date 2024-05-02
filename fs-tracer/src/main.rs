@@ -94,6 +94,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     match data {
                         SyscallInfo::Write(x) => {
                             println!("WRITE KERNEL: DATA {:?}", x);
+                            // TODO: Batching. Also add agent key
                             let _ = ureq::post(thread_url.as_str())
                                 .send_string(format!("hi world! {:?}", x).as_str())
                                 .expect("Failed to send request");
