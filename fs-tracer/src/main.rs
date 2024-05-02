@@ -17,7 +17,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let fs_tracer_server_host = env::var("FS_TRACER_SERVER_HOST")
         .expect("FS_TRACER_SERVER_HOST must be set");
-    let url = format!("http://{fs_tracer_server_host}/payload");
+    let url = format!("http://{fs_tracer_server_host}:9999/payload");
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
