@@ -15,8 +15,8 @@ use tokio::task;
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
-    let fs_tracer_server_host = env::var("FS_TRACER_SERVER_HOST")
-        .expect("FS_TRACER_SERVER_HOST must be set");
+    let fs_tracer_server_host =
+        env::var("FS_TRACER_SERVER_HOST").expect("FS_TRACER_SERVER_HOST must be set");
     let url = format!("http://{fs_tracer_server_host}:9999/payload");
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
@@ -95,7 +95,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         SyscallInfo::Write(x) => {
                             println!("WRITE KERNEL: DATA {:?}", x);
                             let _ = ureq::post(thread_url.as_str())
-                                .send_string("hi world!")
+                                .send_string(format!("hi world! {:?}", x).as_str())
                                 .expect("Failed to send request");
                         }
                         SyscallInfo::Open(x) => {
