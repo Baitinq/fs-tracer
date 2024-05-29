@@ -1,7 +1,6 @@
-use aya::maps::AsyncPerfEventArray;
-use aya::programs::TracePoint;
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Ebpf};
+use aya::{maps::AsyncPerfEventArray, programs::TracePoint};
 use aya_log::EbpfLogger;
 use bytes::BytesMut;
 use fs_tracer_common::SyscallInfo;
@@ -17,7 +16,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let fs_tracer_server_host =
         env::var("FS_TRACER_SERVER_HOST").expect("FS_TRACER_SERVER_HOST must be set");
-    let url = format!("http://{fs_tracer_server_host}:9999/payload");
+    let fs_tracer_api_key = env::var("FS_TRACER_API_KEY").expect("FS_TRACER_API_KEY must be set");
+
+    let url = format!("http://{fs_tracer_server_host}:9999/file/");
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
@@ -77,6 +78,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut buf = perf_array.open(cpu_id, None)?;
 
         let thread_url = url.clone();
+        let thread_api_key = fs_tracer_api_key.clone();
         let thread_exit = exit.clone();
         handles.push(task::spawn(async move {
             let mut buffers = (0..10)
@@ -94,10 +96,23 @@ async fn main() -> Result<(), anyhow::Error> {
                     match data {
                         SyscallInfo::Write(x) => {
                             println!("WRITE KERNEL: DATA {:?}", x);
-                            // TODO: Batching. Also add agent key
-                            let _ = ureq::post(thread_url.as_str())
-                                .send_string(format!("hi world! {:?}", x).as_str())
+                            // TODO: Batching.
+                            let resp = ureq::post(&thread_url)
+                                .set("API_KEY", &thread_api_key)
+                                .send_string(&format!(
+                                    r#"
+{{
+    "timestamp": "{}",
+    "absolute_path": "/tmp/test.txt",
+    "contents": "Hello, world!"
+}}
+"#,
+                                    chrono::Utc::now().to_rfc3339()
+                                ))
                                 .expect("Failed to send request");
+                            if resp.status() != 200 {
+                                panic!("Failed to send request: {:?}", resp);
+                            }
                         }
                         SyscallInfo::Open(x) => {
                             // if !CStr::from_bytes_until_nul(&x.filename)
