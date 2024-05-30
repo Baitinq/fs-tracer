@@ -18,7 +18,7 @@ async fn main() -> Result<(), anyhow::Error> {
         env::var("FS_TRACER_SERVER_HOST").expect("FS_TRACER_SERVER_HOST must be set");
     let fs_tracer_api_key = env::var("FS_TRACER_API_KEY").expect("FS_TRACER_API_KEY must be set");
 
-    let url = format!("http://{fs_tracer_server_host}:9999/file/");
+    let url = format!("http://{fs_tracer_server_host}:9999/api/v1/file/");
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
@@ -101,11 +101,13 @@ async fn main() -> Result<(), anyhow::Error> {
                                 .set("API_KEY", &thread_api_key)
                                 .send_string(&format!(
                                     r#"
-{{
-    "timestamp": "{}",
-    "absolute_path": "/tmp/test.txt",
-    "contents": "Hello, world!"
-}}
+[
+    {{
+        "timestamp": "{}",
+        "absolute_path": "/tmp/test.txt",
+        "contents": "Hello, world!"
+    }}
+]
 "#,
                                     chrono::Utc::now().to_rfc3339()
                                 ))
