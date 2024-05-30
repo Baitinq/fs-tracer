@@ -109,18 +109,19 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     info!("Waiting for threads to stop");
+    let mut batched_req = vec![];
+    let mut i = 0;
     for elt in resolved_files_recv {
-        // TODO: Batching.
+        batched_req.push(elt);
+        i += 1;
+        // Batching.
+        if i % 40 != 0 {
+            continue;
+        }
+        let request_body = format!("[{}]", batched_req.join(","));
         let resp = ureq::post(&url)
             .set("API_KEY", &fs_tracer_api_key)
-            .send_string(&format!(
-                r#"
-                [
-                    {}
-                ]
-                "#,
-                elt
-            ))
+            .send_string(&request_body)
             .expect("Failed to send request");
         if resp.status() != 200 {
             panic!("Failed to send request: {:?}", resp);
