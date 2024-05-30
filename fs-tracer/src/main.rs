@@ -1,3 +1,5 @@
+mod syscall_handler;
+
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Ebpf};
 use aya::{maps::AsyncPerfEventArray, programs::TracePoint};
@@ -7,7 +9,8 @@ use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use tokio::task;
 
 #[tokio::main]
@@ -72,13 +75,19 @@ async fn main() -> Result<(), anyhow::Error> {
     })
     .expect("could not set Ctrl+C handler");
 
+    let (resolved_files_send, resolved_files_recv) = mpsc::channel();
+
+    // Create arcmutex for the syscall handler in order to use it in threads
+    let syscall_handler = Arc::new(Mutex::new(syscall_handler::SyscallHandler::new(
+        resolved_files_send,
+    )));
+
     let mut handles = vec![];
     let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
     for cpu_id in online_cpus()? {
         let mut buf = perf_array.open(cpu_id, None)?;
 
-        let thread_url = url.clone();
-        let thread_api_key = fs_tracer_api_key.clone();
+        let thread_syscall_handler = syscall_handler.clone();
         let thread_exit = exit.clone();
         handles.push(task::spawn(async move {
             let mut buffers = (0..10)
@@ -93,47 +102,30 @@ async fn main() -> Result<(), anyhow::Error> {
                     }
                     let ptr = buf.as_ptr() as *const SyscallInfo;
                     let data = unsafe { ptr.read_unaligned() };
-                    match data {
-                        SyscallInfo::Write(x) => {
-                            println!("WRITE KERNEL: DATA {:?}", x);
-                            // TODO: Batching.
-                            let resp = ureq::post(&thread_url)
-                                .set("API_KEY", &thread_api_key)
-                                .send_string(&format!(
-                                    r#"
-[
-    {{
-        "timestamp": "{}",
-        "absolute_path": "/tmp/test.txt",
-        "contents": "Hello, world!"
-    }}
-]
-"#,
-                                    chrono::Utc::now().to_rfc3339()
-                                ))
-                                .expect("Failed to send request");
-                            if resp.status() != 200 {
-                                panic!("Failed to send request: {:?}", resp);
-                            }
-                        }
-                        SyscallInfo::Open(x) => {
-                            // if !CStr::from_bytes_until_nul(&x.filename)
-                            //     .unwrap_or_default()
-                            //     .to_str()
-                            //     .unwrap_or_default()
-                            //     .starts_with('/')
-                            // {
-                            println!("OPEN KERNEL DATA: {:?}", x)
-                            // }
-                        }
-                    }
+                    thread_syscall_handler.lock().unwrap().handle_syscall(data);
                 }
             }
         }));
     }
 
     info!("Waiting for threads to stop");
-    futures::future::join_all(handles).await;
+    for elt in resolved_files_recv {
+        // TODO: Batching.
+        let resp = ureq::post(&url)
+            .set("API_KEY", &fs_tracer_api_key)
+            .send_string(&format!(
+                r#"
+                [
+                    {}
+                ]
+                "#,
+                elt
+            ))
+            .expect("Failed to send request");
+        if resp.status() != 200 {
+            panic!("Failed to send request: {:?}", resp);
+        }
+    }
     info!("All threads stopped, exiting now...");
 
     Ok(())
