@@ -32,27 +32,6 @@ impl SyscallHandler {
                     "some contents!!"
                 ));
                 return 0;
-                // TODO: Batching.
-                //                 let resp = ureq::post(&thread_url)
-                //                     .set("API_KEY", &thread_api_key)
-                //                     .send_string(&format!(
-                //                         r#"
-                // [
-                //     {{
-                //         "timestamp": "{}",
-                //         "absolute_path": "{}",
-                //         "contents": "{}"
-                //     }}
-                // ]
-                // "#,
-                //                         chrono::Utc::now().to_rfc3339(),
-                //                         "/tmp/file.txt",
-                //                         "some contents!!"
-                //                     ))
-                //                     .expect("Failed to send request");
-                //                 if resp.status() != 200 {
-                //                     panic!("Failed to send request: {:?}", resp);
-                //                 }
             }
             SyscallInfo::Open(x) => {
                 // if !CStr::from_bytes_until_nul(&x.filename)

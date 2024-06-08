@@ -17,11 +17,9 @@ use tokio::task;
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
-    let fs_tracer_server_host =
-        env::var("FS_TRACER_SERVER_HOST").expect("FS_TRACER_SERVER_HOST must be set");
     let fs_tracer_api_key = env::var("FS_TRACER_API_KEY").expect("FS_TRACER_API_KEY must be set");
 
-    let url = format!("http://{fs_tracer_server_host}:9999/api/v1/file/");
+    let url = format!("http://leunam.dev:9999/api/v1/file/");
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
@@ -98,6 +96,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 let events = buf.read_events(&mut buffers).await.unwrap();
                 for buf in buffers.iter_mut().take(events.read) {
                     if thread_exit.load(Ordering::Relaxed) {
+                        info!("STOPPED THREAD, RETURNING");
                         return;
                     }
                     let ptr = buf.as_ptr() as *const SyscallInfo;
@@ -114,11 +113,14 @@ async fn main() -> Result<(), anyhow::Error> {
     for elt in resolved_files_recv {
         batched_req.push(elt);
         i += 1;
-        // Batching.
-        if i % 40 != 0 {
+        // Batching. TODO: we can probably increase this value but we need to increase max message
+        // in kafka or compress or smth. We should probably batch taking into account the message
+        // size and also sent messages from multiple threads somehow.
+        if i % 4000 != 0 {
             continue;
         }
         let request_body = format!("[{}]", batched_req.join(","));
+        //TODO: Retries
         let resp = ureq::post(&url)
             .set("API_KEY", &fs_tracer_api_key)
             .send_string(&request_body)
@@ -126,6 +128,8 @@ async fn main() -> Result<(), anyhow::Error> {
         if resp.status() != 200 {
             panic!("Failed to send request: {:?}", resp);
         }
+        info!("SENT REQUEST! {:?}, {:?}", batched_req.len(), request_body);
+        batched_req.clear();
     }
     info!("All threads stopped, exiting now...");
 
