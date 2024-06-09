@@ -66,14 +66,14 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
         )
     };
 
-    info!(
-        &ctx,
-        "filename: {} dfd: {}, flags: {}, pid: {}",
-        filename,
-        args.dfd,
-        args.flags,
-        ctx.pid()
-    );
+    // info!(
+    //     &ctx,
+    //     "filename: {} dfd: {}, flags: {}, pid: {}",
+    //     filename,
+    //     args.dfd,
+    //     args.flags,
+    //     ctx.pid()
+    // );
 
     if filename.len() < 3 {
         return Ok(0);
@@ -116,7 +116,7 @@ unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long
 
 unsafe fn handle_sys_open_exit(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_open_exit start");
-    let ret = ctx.read_at::<c_long>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
+    let ret = ctx.read_at::<c_int>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
     let tgid = ctx.tgid();
     if let Some(syscall) = SYSCALL_ENTERS.get(&tgid)

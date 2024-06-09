@@ -4,7 +4,6 @@
 use aya_ebpf::cty::c_long;
 use core::ffi::c_int;
 use core::ffi::c_size_t;
-use core::ffi::c_uint;
 use core::ffi::CStr;
 use core::fmt::{self, Formatter};
 use core::str;
@@ -21,7 +20,7 @@ pub enum SyscallInfo {
 #[derive(Clone, Copy)]
 pub struct WriteSyscallBPF {
     pub pid: u32,
-    pub fd: c_uint,
+    pub fd: c_int,
     pub buf: [u8; 96], //TODO: might want to use c_char here
     pub count: c_size_t,
 
@@ -49,7 +48,7 @@ pub struct OpenSyscallBPF {
     pub filename: [u8; 96],
     pub flags: c_int,
     pub mode: umode_t,
-    pub ret: c_long,
+    pub ret: c_int,
 }
 
 unsafe impl Sync for OpenSyscallBPF {}
