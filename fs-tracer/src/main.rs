@@ -109,15 +109,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Waiting for threads to stop");
     let mut batched_req = vec![];
-    let mut i = 0;
     for elt in resolved_files_recv {
         batched_req.push(elt);
-        i += 1;
         // Batching. TODO: we can probably increase this value but we need to increase max message
         // in kafka or compress or smth. We should probably batch taking into account the message
         // size and also sent messages from multiple threads somehow.
         // We might just need websockets
-        if i % 4000 != 0 {
+        if batched_req.len() < 4000 {
             continue;
         }
         let request_body = format!("[{}]", batched_req.join(","));
