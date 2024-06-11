@@ -119,18 +119,28 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         let request_body = format!("[{}]", batched_req.join(","));
-        //TODO: Retries
-        let resp = ureq::post(&url)
-            .set("API_KEY", &fs_tracer_api_key)
-            .send_string(&request_body)
-            .expect("Failed to send request");
-        if resp.status() != 200 {
-            panic!("Failed to send request: {:?}", resp);
-        }
+        send_request(&url, &fs_tracer_api_key, &request_body);
         info!("SENT REQUEST! {:?}, {:?}", batched_req.len(), request_body);
         batched_req.clear();
     }
+
     info!("All threads stopped, exiting now...");
 
+    if !batched_req.is_empty() {
+        let request_body = format!("[{}]", batched_req.join(","));
+        send_request(&url, &fs_tracer_api_key, &request_body);
+    }
+
     Ok(())
+}
+
+fn send_request(url: &str, fs_tracer_api_key: &str, request_body: &str) {
+    //TODO: Retries
+    let resp = ureq::post(&url)
+        .set("API_KEY", &fs_tracer_api_key)
+        .send_string(&request_body)
+        .expect("Failed to send request");
+    if resp.status() != 200 {
+        panic!("Failed to send request: {:?}", resp);
+    }
 }
