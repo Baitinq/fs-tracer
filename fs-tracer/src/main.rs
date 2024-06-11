@@ -9,9 +9,7 @@ use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
-use tokio::task;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
