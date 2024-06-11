@@ -73,21 +73,19 @@ async fn main() -> Result<(), anyhow::Error> {
     })
     .expect("could not set Ctrl+C handler");
 
-    let (resolved_files_send, resolved_files_recv) = mpsc::channel();
+    let (resolved_files_send, resolved_files_recv) = crossbeam_channel::unbounded();
 
     // Create arcmutex for the syscall handler in order to use it in threads
-    let syscall_handler = Arc::new(Mutex::new(syscall_handler::SyscallHandler::new(
-        resolved_files_send,
-    )));
 
     let mut handles = vec![];
     let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
     for cpu_id in online_cpus()? {
         let mut buf = perf_array.open(cpu_id, None)?;
 
-        let thread_syscall_handler = syscall_handler.clone();
         let thread_exit = exit.clone();
-        handles.push(task::spawn(async move {
+        let thread_sender = resolved_files_send.clone();
+        handles.push(tokio::spawn(async move {
+            let mut syscall_handler = syscall_handler::SyscallHandler::new(thread_sender);
             let mut buffers = (0..10)
                 .map(|_| BytesMut::with_capacity(1024))
                 .collect::<Vec<_>>();
@@ -101,15 +99,16 @@ async fn main() -> Result<(), anyhow::Error> {
                     }
                     let ptr = buf.as_ptr() as *const SyscallInfo;
                     let data = unsafe { ptr.read_unaligned() };
-                    thread_syscall_handler.lock().unwrap().handle_syscall(data);
+                    syscall_handler.handle_syscall(data);
                 }
             }
         }));
     }
 
-    info!("Waiting for threads to stop");
+    drop(resolved_files_send);
+
     let mut batched_req = vec![];
-    for elt in resolved_files_recv {
+    for elt in &resolved_files_recv {
         batched_req.push(elt);
         // Batching. TODO: we can probably increase this value but we need to increase max message
         // in kafka or compress or smth. We should probably batch taking into account the message
@@ -118,6 +117,7 @@ async fn main() -> Result<(), anyhow::Error> {
         if batched_req.len() < 4000 {
             continue;
         }
+
         let request_body = format!("[{}]", batched_req.join(","));
         //TODO: Retries
         let resp = ureq::post(&url)

@@ -1,10 +1,12 @@
-use std::{collections::HashMap, ffi::CStr, sync::mpsc::Sender};
+use crossbeam_channel::Sender;
+use std::{collections::HashMap, ffi::CStr};
 
 use fs_tracer_common::SyscallInfo;
 
 pub struct SyscallHandler {
     resolved_files: Sender<String>,
     open_files: HashMap<i32, String>,
+    total: u64,
 }
 
 impl SyscallHandler {
@@ -12,6 +14,7 @@ impl SyscallHandler {
         Self {
             resolved_files,
             open_files: HashMap::new(),
+            total: 0,
         }
     }
 
@@ -43,6 +46,8 @@ impl SyscallHandler {
                     filename,
                     contents,
                 ));
+                self.total += 1;
+                println!("Total: {:?}", self.total);
                 return 0;
             }
             SyscallInfo::Open(x) => {
