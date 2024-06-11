@@ -75,8 +75,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let (resolved_files_send, resolved_files_recv) = crossbeam_channel::unbounded();
 
-    // Create arcmutex for the syscall handler in order to use it in threads
-
     let mut handles = vec![];
     let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
     for cpu_id in online_cpus()? {
@@ -112,8 +110,7 @@ async fn main() -> Result<(), anyhow::Error> {
         batched_req.push(elt);
         // Batching. TODO: we can probably increase this value but we need to increase max message
         // in kafka or compress or smth. We should probably batch taking into account the message
-        // size and also sent messages from multiple threads somehow.
-        // We might just need websockets
+        // size.
         if batched_req.len() < 4000 {
             continue;
         }
