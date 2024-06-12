@@ -1,11 +1,13 @@
+use std::ffi::CStr;
+
 use crossbeam_channel::Sender;
-use std::{collections::HashMap, ffi::CStr};
+use delay_map::HashMapDelay;
 
 use fs_tracer_common::SyscallInfo;
 
 pub struct SyscallHandler {
     resolved_files: Sender<String>,
-    open_files: HashMap<i32, String>,
+    open_files: HashMapDelay<i32, String>,
     total: u64,
 }
 
@@ -13,7 +15,7 @@ impl SyscallHandler {
     pub fn new(resolved_files: Sender<String>) -> Self {
         Self {
             resolved_files,
-            open_files: HashMap::new(),
+            open_files: HashMapDelay::new(std::time::Duration::from_secs(400)),
             total: 0,
         }
     }

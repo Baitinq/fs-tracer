@@ -109,7 +109,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // Batching. TODO: we can probably increase this value but we need to increase max message
         // in kafka or compress or smth. We should probably batch taking into account the message
         // size.
-        if batched_req.len() < 4000 {
+        if batched_req.len() < 2700 {
             continue;
         }
 
