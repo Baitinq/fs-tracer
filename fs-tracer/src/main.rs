@@ -5,6 +5,7 @@ use aya::{include_bytes_aligned, Ebpf};
 use aya::{maps::AsyncPerfEventArray, programs::TracePoint};
 use aya_log::EbpfLogger;
 use bytes::BytesMut;
+use core::panic;
 use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
 use std::env;
@@ -97,7 +98,9 @@ async fn main() -> Result<(), anyhow::Error> {
                     }
                     let ptr = buf.as_ptr() as *const SyscallInfo;
                     let data = unsafe { ptr.read_unaligned() };
-                    syscall_handler.handle_syscall(data);
+                    if let Err(_) = syscall_handler.handle_syscall(data) {
+                        panic!("Error handling syscall!");
+                    }
                 }
             }
         }));
