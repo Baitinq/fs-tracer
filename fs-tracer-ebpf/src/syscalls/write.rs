@@ -22,7 +22,7 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_lon
     // info!(&ctx, "handle_sys_write start");
     #[derive(Clone, Copy)]
     struct WriteSyscallArgs {
-        fd: c_uint,
+        fd: c_int,
         buf: *const c_char,
         count: c_size_t,
     }
