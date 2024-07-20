@@ -41,7 +41,7 @@ pub fn handle_sys_open(
 unsafe fn handle_sys_open_enter(ctx: TracePointContext) -> Result<c_long, c_long> {
     //info!(&ctx, "handle_sys_open_enter start");
 
-    #[repr(C)]
+    #[repr(C)] //NOTE: This is super important
     #[derive(Clone, Copy)]
     struct OpenAtSyscallArgs {
         dfd: c_int,

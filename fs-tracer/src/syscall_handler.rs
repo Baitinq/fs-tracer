@@ -29,7 +29,10 @@ impl SyscallHandler {
     fn handle_write(&self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
         let filename = match self.open_files.get(&write_syscall.fd) {
             None => {
-                println!("DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL");
+                println!(
+                    "DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL (fd: {}, ret: {})",
+                    write_syscall.fd, write_syscall.ret
+                );
                 return Ok(());
             }
             Some(str) => str,

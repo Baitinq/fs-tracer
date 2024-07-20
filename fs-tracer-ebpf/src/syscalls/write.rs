@@ -20,6 +20,7 @@ pub fn handle_sys_write(
 
 unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_long> {
     // info!(&ctx, "handle_sys_write start");
+    #[repr(C)]
     #[derive(Clone, Copy)]
     struct WriteSyscallArgs {
         fd: c_int,
@@ -39,7 +40,16 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_lon
 
     let mut anotherbuf = [0u8; 96];
     let _ = bpf_probe_read_kernel_str_bytes(buf_ref.as_ptr(), &mut anotherbuf);
-    // info!(&ctx, "handle_sys_write fd: {} pid: {}", args.fd, ctx.pid());
+    info!(
+        &ctx,
+        "handle_sys_write fd: {} pid: {} count: {}",
+        args.fd,
+        ctx.pid(),
+        args.count
+    );
+    info!(&ctx, "buf: {}", unsafe {
+        str::from_utf8_unchecked(buf_ref)
+    });
 
     let tgid: u32 = ctx.tgid();
     let _ = SYSCALL_ENTERS.insert(
