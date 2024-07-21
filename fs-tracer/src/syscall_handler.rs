@@ -42,17 +42,19 @@ impl SyscallHandler {
             .to_str()
             .unwrap_or_default();
         println!("WRITE KERNEL: DATA {:?}", write_syscall);
+        let serialized_filename = serde_json::to_string(&filename).unwrap();
+        let serialized_contents = serde_json::to_string(&contents).unwrap();
         let _ = self.resolved_files.send(format!(
             r#"
                 {{
                     "timestamp": "{}",
-                    "absolute_path": "{}",
-                    "contents": "{}"
+                    "absolute_path": {},
+                    "contents": {}
                 }}
                 "#,
             chrono::Utc::now().to_rfc3339(),
-            filename,
-            contents,
+            serialized_filename,
+            serialized_contents,
         ));
         Ok(())
     }
