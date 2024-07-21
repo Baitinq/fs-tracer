@@ -7,7 +7,7 @@ use fs_tracer_common::{OpenSyscallBPF, SyscallInfo, WriteSyscallBPF};
 
 pub struct SyscallHandler {
     resolved_files: Sender<String>,
-    open_files: HashMapDelay<i32, String>,
+    open_files: HashMapDelay<(i32, u32), String>,
 }
 
 impl SyscallHandler {
@@ -27,7 +27,7 @@ impl SyscallHandler {
     }
 
     fn handle_write(&self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
-        let filename = match self.open_files.get(&write_syscall.fd) {
+        let filename = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
             None => {
                 println!(
                     "DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL (fd: {}, ret: {})",
@@ -41,7 +41,10 @@ impl SyscallHandler {
             .unwrap_or_default()
             .to_str()
             .unwrap_or_default();
-        println!("WRITE KERNEL: DATA {:?}", write_syscall);
+        println!(
+            "WRITE KERNEL: DATA {:?} FILENAME: {:?}",
+            write_syscall, filename
+        );
         let serialized_filename = serde_json::to_string(&filename).unwrap();
         let serialized_contents = serde_json::to_string(&contents).unwrap();
         let _ = self.resolved_files.send(format!(
@@ -67,7 +70,8 @@ impl SyscallHandler {
         println!("OPEN KERNEL DATA: {:?}", open_syscall);
         println!("OPEN FILENAME: {:?}", filename);
         let fd = open_syscall.ret;
-        self.open_files.insert(fd, filename.to_string());
+        self.open_files
+            .insert((fd, open_syscall.pid), filename.to_string());
         Ok(())
     }
 }
