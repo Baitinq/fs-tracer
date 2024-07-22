@@ -14,6 +14,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use std::time::{Duration, Instant};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -110,6 +111,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     drop(resolved_files_send);
 
+    let batch_timeout = Duration::from_secs(40);
+    let mut last_sent_time = Instant::now();
+
     let mut resolved_files_for_request: Vec<FSTracerFile> = vec![];
     for elt in &resolved_files_recv {
         info!("HELLO123!");
@@ -117,20 +121,19 @@ async fn main() -> Result<(), anyhow::Error> {
             continue;
         }
         resolved_files_for_request.push(elt);
-        if resolved_files_for_request.len() < 40 {
-            //TODO: This is not good, maybe time
-            //based?
+        if last_sent_time.elapsed() < batch_timeout {
             continue;
         }
 
         info!("SENDING REQUEST!");
         send_request(&url, &fs_tracer_api_key, &resolved_files_for_request);
         resolved_files_for_request.clear();
+        last_sent_time = Instant::now();
     }
 
     info!("All threads stopped, exiting now...");
 
-    if !resolved_files_for_request.len() > 1 {
+    if !resolved_files_for_request.len() > 0 {
         send_request(&url, &fs_tracer_api_key, &resolved_files_for_request);
     }
 
