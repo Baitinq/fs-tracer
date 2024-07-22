@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 use aya_ebpf::{
     cty::{c_char, c_uint},
     helpers::{bpf_probe_read_kernel_str_bytes, bpf_probe_read_user_str_bytes},

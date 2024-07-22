@@ -68,11 +68,8 @@ fn handle_syscall(
         /*8 => {
             Ok(0)
             //handle_sys_lseek(ctx);
-        }
-        3 => {
-            Ok(0)
-            //handle_sys_close(ctx);
         }*/
+        3 => syscalls::close::handle_sys_close(ctx, syscall_type),
         _ => {
             info!(&ctx, "unhandled syscall: {}", syscall_nr);
             Err(1)

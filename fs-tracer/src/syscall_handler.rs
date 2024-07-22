@@ -3,15 +3,17 @@ use std::ffi::CStr;
 use crossbeam_channel::Sender;
 use delay_map::HashMapDelay;
 
-use fs_tracer_common::{OpenSyscallBPF, SyscallInfo, WriteSyscallBPF};
+use fs_tracer_common::{CloseSyscallBPF, OpenSyscallBPF, SyscallInfo, WriteSyscallBPF};
+
+use crate::FSTracerFile;
 
 pub struct SyscallHandler {
-    resolved_files: Sender<String>,
+    resolved_files: Sender<FSTracerFile>,
     open_files: HashMapDelay<(i32, u32), String>,
 }
 
 impl SyscallHandler {
-    pub fn new(resolved_files: Sender<String>) -> Self {
+    pub fn new(resolved_files: Sender<FSTracerFile>) -> Self {
         Self {
             resolved_files,
             open_files: HashMapDelay::new(std::time::Duration::from_secs(400)),
@@ -22,7 +24,7 @@ impl SyscallHandler {
         match data {
             SyscallInfo::Write(write_syscall) => self.handle_write(write_syscall),
             SyscallInfo::Open(open_syscall) => self.handle_open(open_syscall),
-            //TODO: SyscallInfo::Close
+            SyscallInfo::Close(close_syscall) => self.handle_close(close_syscall),
         }
     }
 
@@ -45,20 +47,11 @@ impl SyscallHandler {
             "WRITE KERNEL: DATA {:?} FILENAME: {:?}",
             write_syscall, filename
         );
-        let serialized_filename = serde_json::to_string(&filename).unwrap();
-        let serialized_contents = serde_json::to_string(&contents).unwrap();
-        let _ = self.resolved_files.send(format!(
-            r#"
-                {{
-                    "timestamp": "{}",
-                    "absolute_path": {},
-                    "contents": {}
-                }}
-                "#,
-            chrono::Utc::now().to_rfc3339(),
-            serialized_filename,
-            serialized_contents,
-        ));
+        let _ = self.resolved_files.send(FSTracerFile {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            absolute_path: filename.to_string(),
+            contents: contents.to_string(),
+        });
         Ok(())
     }
 
@@ -72,6 +65,27 @@ impl SyscallHandler {
         let fd = open_syscall.ret;
         self.open_files
             .insert((fd, open_syscall.pid), filename.to_string());
+        Ok(())
+    }
+
+    fn handle_close(&mut self, close_syscall: CloseSyscallBPF) -> Result<(), ()> {
+        let filename = match self
+            .open_files
+            .remove(&(close_syscall.fd, close_syscall.pid))
+        {
+            None => {
+                println!(
+                    "DIDNT FIND AN OPEN FILE FOR THE CLOSE SYSCALL (fd: {})",
+                    close_syscall.fd
+                );
+                return Ok(());
+            }
+            Some(str) => str,
+        };
+        println!("CLOSE KERNEL DATA: {:?}", close_syscall);
+        println!("CLOSE FILENAME: {:?}", filename);
+        self.open_files
+            .remove(&(close_syscall.fd, close_syscall.pid));
         Ok(())
     }
 }

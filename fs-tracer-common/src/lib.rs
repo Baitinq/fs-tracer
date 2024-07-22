@@ -15,6 +15,7 @@ use crate::vmlinux::umode_t;
 pub enum SyscallInfo {
     Write(WriteSyscallBPF),
     Open(OpenSyscallBPF),
+    Close(CloseSyscallBPF),
 }
 
 #[derive(Clone, Copy)]
@@ -63,6 +64,26 @@ impl fmt::Debug for OpenSyscallBPF {
                 &CStr::from_bytes_until_nul(&self.filename).unwrap_or_default(),
             )
             .field("flags", &self.flags)
+            .field("ret", &self.ret)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct CloseSyscallBPF {
+    pub pid: u32,
+    pub fd: c_int,
+
+    pub ret: c_long,
+}
+
+unsafe impl Sync for CloseSyscallBPF {}
+
+impl fmt::Debug for CloseSyscallBPF {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CloseSyscallBPF")
+            .field("pid", &self.pid)
+            .field("fd", &self.fd)
             .field("ret", &self.ret)
             .finish()
     }

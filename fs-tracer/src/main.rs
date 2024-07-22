@@ -8,6 +8,7 @@ use bytes::BytesMut;
 use core::panic;
 use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
+use serde::Serialize;
 use std::env;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -56,13 +57,14 @@ async fn main() -> Result<(), anyhow::Error> {
     trace_enters_program.attach("syscalls", "sys_enter_write")?;
     // program.attach("syscalls", "sys_exit_write")?;
     //trace_enters_program.attach("syscalls", "sys_enter_lseek")?;
-    //program.attach("syscalls", "sys_enter_close")?;
+    trace_enters_program.attach("syscalls", "sys_enter_close")?;
 
     let trace_exits_program: &mut TracePoint =
         bpf.program_mut("fs_tracer_exit").unwrap().try_into()?;
     trace_exits_program.load()?;
     trace_exits_program.attach("syscalls", "sys_exit_openat")?;
     trace_exits_program.attach("syscalls", "sys_exit_write")?;
+    trace_exits_program.attach("syscalls", "sys_exit_close")?;
 
     println!("Num of cpus: {}", online_cpus()?.len());
 
@@ -108,39 +110,49 @@ async fn main() -> Result<(), anyhow::Error> {
 
     drop(resolved_files_send);
 
-    let mut request_body = String::from("[");
+    let mut resolved_files_for_request: Vec<FSTracerFile> = vec![];
     for elt in &resolved_files_recv {
-        request_body.push_str(&elt);
-        request_body.push_str(",");
-        // 1000000 bytes = 1MB (max kafka message size)
-        if request_body.len() < 999999 {
+        info!("HELLO123!");
+        if elt.absolute_path.starts_with("/proc/") {
+            continue;
+        }
+        resolved_files_for_request.push(elt);
+        if resolved_files_for_request.len() < 40 {
+            //TODO: This is not good, maybe time
+            //based?
             continue;
         }
 
-        request_body.pop(); // remove trailing ','
-        request_body.push_str("]");
-        send_request(&url, &fs_tracer_api_key, &request_body);
-        info!("SENT REQUEST! {:?}", request_body);
-        request_body = String::from("[");
+        info!("SENDING REQUEST!");
+        send_request(&url, &fs_tracer_api_key, &resolved_files_for_request);
+        resolved_files_for_request.clear();
     }
 
     info!("All threads stopped, exiting now...");
 
-    if !request_body.len() > 1 {
-        request_body.push_str("]");
-        send_request(&url, &fs_tracer_api_key, &request_body);
+    if !resolved_files_for_request.len() > 1 {
+        send_request(&url, &fs_tracer_api_key, &resolved_files_for_request);
     }
 
     Ok(())
 }
 
-fn send_request(url: &str, fs_tracer_api_key: &str, request_body: &str) {
+#[derive(Serialize, Debug)]
+struct FSTracerFile {
+    timestamp: String,
+    absolute_path: String,
+    contents: String,
+}
+
+fn send_request(url: &str, fs_tracer_api_key: &str, files: &Vec<FSTracerFile>) {
     //TODO: Retries
+    let serialized_body = serde_json::to_string(files).unwrap();
     let resp = ureq::post(&url)
         .set("API_KEY", &fs_tracer_api_key)
-        .send_string(&request_body)
+        .send_string(&serialized_body)
         .expect("Failed to send request");
     if resp.status() != 200 {
         panic!("Failed to send request: {:?}", resp);
     }
+    info!("SENT REQUEST! {:?}", serialized_body);
 }
