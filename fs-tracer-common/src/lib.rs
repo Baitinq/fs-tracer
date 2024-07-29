@@ -3,8 +3,9 @@
 
 use aya_ebpf::cty::c_long;
 use core::ffi::c_int;
-use core::ffi::c_size_t;
+use core::ffi::c_longlong;
 use core::ffi::CStr;
+use core::ffi::{c_size_t, c_uint};
 use core::fmt::{self, Formatter};
 use core::str;
 
@@ -16,6 +17,7 @@ pub enum SyscallInfo {
     Write(WriteSyscallBPF),
     Open(OpenSyscallBPF),
     Close(CloseSyscallBPF),
+    FSeek(FSeekSyscallBPF),
 }
 
 #[derive(Clone, Copy)]
@@ -23,7 +25,7 @@ pub struct WriteSyscallBPF {
     pub pid: u32,
     pub fd: c_int,
     pub buf: [u8; 96], //TODO: might want to use c_char here
-    pub count: c_size_t,
+    pub count: i64,
 
     pub ret: c_long,
 }
@@ -84,6 +86,30 @@ impl fmt::Debug for CloseSyscallBPF {
         f.debug_struct("CloseSyscallBPF")
             .field("pid", &self.pid)
             .field("fd", &self.fd)
+            .field("ret", &self.ret)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct FSeekSyscallBPF {
+    pub pid: u32,
+    pub fd: c_int,
+    pub offset: i64,
+    pub whence: c_uint,
+
+    pub ret: c_long,
+}
+
+unsafe impl Sync for FSeekSyscallBPF {}
+
+impl fmt::Debug for FSeekSyscallBPF {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FSeekSyscallBPF")
+            .field("pid", &self.pid)
+            .field("fd", &self.fd)
+            .field("offset", &self.offset)
+            .field("whence", &self.whence)
             .field("ret", &self.ret)
             .finish()
     }

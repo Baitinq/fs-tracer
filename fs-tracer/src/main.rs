@@ -10,6 +10,7 @@ use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
 use serde::Serialize;
 use std::env;
+use std::ffi::c_long;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -56,8 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
     trace_enters_program.load()?;
     trace_enters_program.attach("syscalls", "sys_enter_openat")?;
     trace_enters_program.attach("syscalls", "sys_enter_write")?;
-    // program.attach("syscalls", "sys_exit_write")?;
-    //trace_enters_program.attach("syscalls", "sys_enter_lseek")?;
+    trace_enters_program.attach("syscalls", "sys_enter_lseek")?;
     trace_enters_program.attach("syscalls", "sys_enter_close")?;
 
     let trace_exits_program: &mut TracePoint =
@@ -65,6 +65,7 @@ async fn main() -> Result<(), anyhow::Error> {
     trace_exits_program.load()?;
     trace_exits_program.attach("syscalls", "sys_exit_openat")?;
     trace_exits_program.attach("syscalls", "sys_exit_write")?;
+    trace_exits_program.attach("syscalls", "sys_exit_lseek")?;
     trace_exits_program.attach("syscalls", "sys_exit_close")?;
 
     println!("Num of cpus: {}", online_cpus()?.len());
@@ -89,7 +90,7 @@ async fn main() -> Result<(), anyhow::Error> {
         handles.push(tokio::spawn(async move {
             let mut syscall_handler = syscall_handler::SyscallHandler::new(thread_sender);
             let mut buffers = (0..10)
-                .map(|_| BytesMut::with_capacity(1024))
+                .map(|_| BytesMut::with_capacity(4096))
                 .collect::<Vec<_>>();
 
             loop {
@@ -145,7 +146,7 @@ struct FSTracerFile {
     timestamp: String,
     absolute_path: String,
     contents: String,
-    offset: usize,
+    offset: i64,
 }
 
 fn send_request(url: &str, fs_tracer_api_key: &str, files: &Vec<FSTracerFile>) {

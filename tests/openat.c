@@ -22,6 +22,13 @@ int main(int argc, char** argv) {
 		printf("Write error: %s\n", strerror(errno));
 	}
 	
+	ret = syscall(SYS_lseek, fd, 24, SEEK_SET);
+	printf("FSeek ret: %d\n", ret);
+
+	if (ret == -1) {
+		printf("FSeek error: %s\n", strerror(errno));
+	}
+	
 	ret = syscall(SYS_write, fd, "\nplease", 7);
 	printf("Write ret: %d\n", ret);
 

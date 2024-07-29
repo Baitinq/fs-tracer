@@ -23,7 +23,7 @@ unsafe fn handle_sys_write_enter(ctx: TracePointContext) -> Result<c_long, c_lon
     struct WriteSyscallArgs {
         fd: c_int,
         buf: *const c_char,
-        count: c_size_t,
+        count: i64,
     }
     let args = ctx.read_at::<WriteSyscallArgs>(16)?;
 
