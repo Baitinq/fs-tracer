@@ -111,7 +111,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     drop(resolved_files_send);
 
-    let batch_timeout = Duration::from_secs(40);
+    let batch_timeout = Duration::from_secs(20);
     let mut last_sent_time = Instant::now();
 
     let mut resolved_files_for_request: Vec<FSTracerFile> = vec![];
@@ -149,14 +149,24 @@ struct FSTracerFile {
 }
 
 fn send_request(url: &str, fs_tracer_api_key: &str, files: &Vec<FSTracerFile>) {
-    //TODO: Retries. We also need to handle when you reopen a file.
-    let serialized_body = serde_json::to_string(files).unwrap();
-    let resp = ureq::post(&url)
-        .set("API_KEY", &fs_tracer_api_key)
-        .send_string(&serialized_body)
-        .expect("Failed to send request");
-    if resp.status() != 200 {
-        panic!("Failed to send request: {:?}", resp);
+    //TODO: We need to handle when you reopen a file.
+    let serialized_body = serde_json::to_string(files).expect("failed to serialize failes");
+    for _ in 1..4 {
+        match ureq::post(&url)
+            .set("API_KEY", &fs_tracer_api_key)
+            .send_string(&serialized_body)
+        {
+            Ok(resp) => {
+                if resp.status() == 200 {
+                    break;
+                }
+                info!("Failed to send request: {:?}", resp);
+            }
+            Err(err) => {
+                info!("Failed to send request: {:?}", err);
+            }
+        }
     }
+
     info!("SENT REQUEST! {:?}", serialized_body);
 }
