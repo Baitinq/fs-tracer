@@ -145,6 +145,7 @@ struct FSTracerFile {
     timestamp: String,
     absolute_path: String,
     contents: String,
+    offset: usize,
 }
 
 fn send_request(url: &str, fs_tracer_api_key: &str, files: &Vec<FSTracerFile>) {

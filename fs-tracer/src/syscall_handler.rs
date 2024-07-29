@@ -9,7 +9,7 @@ use crate::FSTracerFile;
 
 pub struct SyscallHandler {
     resolved_files: Sender<FSTracerFile>,
-    open_files: HashMapDelay<(i32, u32), String>,
+    open_files: HashMapDelay<(i32, u32), (String, usize)>,
 }
 
 impl SyscallHandler {
@@ -28,8 +28,8 @@ impl SyscallHandler {
         }
     }
 
-    fn handle_write(&self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
-        let filename = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
+    fn handle_write(&mut self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
+        let (filename, offset) = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
             None => {
                 println!(
                     "DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL (fd: {}, ret: {})",
@@ -37,21 +37,31 @@ impl SyscallHandler {
                 );
                 return Ok(());
             }
-            Some(str) => str,
+            Some(str) => str.clone(),
         };
         let contents = CStr::from_bytes_until_nul(&write_syscall.buf)
             .unwrap_or_default()
             .to_str()
             .unwrap_or_default();
         println!(
-            "WRITE KERNEL: DATA {:?} FILENAME: {:?}",
-            write_syscall, filename
+            "WRITE KERNEL: DATA {:?} FILENAME: {:?} OFFSET: {:?} LEN: {:?}",
+            write_syscall,
+            filename,
+            offset,
+            contents.len()
         );
         let _ = self.resolved_files.send(FSTracerFile {
             timestamp: chrono::Utc::now().to_rfc3339(),
             absolute_path: filename.to_string(),
             contents: contents.to_string(),
+            offset: offset,
         });
+        self.open_files
+            .remove(&(write_syscall.fd, write_syscall.pid));
+        self.open_files.insert(
+            (write_syscall.fd, write_syscall.pid),
+            (filename.clone(), offset + write_syscall.count),
+        );
         Ok(())
     }
 
@@ -64,7 +74,7 @@ impl SyscallHandler {
         println!("OPEN FILENAME: {:?}", filename);
         let fd = open_syscall.ret;
         self.open_files
-            .insert((fd, open_syscall.pid), filename.to_string());
+            .insert((fd, open_syscall.pid), (filename.to_string(), 0));
         Ok(())
     }
 
@@ -84,8 +94,6 @@ impl SyscallHandler {
         };
         println!("CLOSE KERNEL DATA: {:?}", close_syscall);
         println!("CLOSE FILENAME: {:?}", filename);
-        self.open_files
-            .remove(&(close_syscall.fd, close_syscall.pid));
         Ok(())
     }
 }
