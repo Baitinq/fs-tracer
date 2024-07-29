@@ -9,9 +9,16 @@ use fs_tracer_common::{
 
 use crate::FSTracerFile;
 
+#[derive(Clone, Debug)]
+struct OpenFile {
+    filename: String,
+    offset: i64,
+    contents: String,
+}
+
 pub struct SyscallHandler {
     resolved_files: Sender<FSTracerFile>,
-    open_files: HashMapDelay<(i32, u32), (String, i64)>,
+    open_files: HashMapDelay<(i32, u32), OpenFile>,
 }
 
 impl SyscallHandler {
@@ -32,7 +39,7 @@ impl SyscallHandler {
     }
 
     fn handle_write(&mut self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
-        let (filename, offset) = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
+        let open_file = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
             None => {
                 println!(
                     "DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL (fd: {}, ret: {})",
@@ -42,34 +49,51 @@ impl SyscallHandler {
             }
             Some(str) => str.clone(),
         };
-        let contents = CStr::from_bytes_until_nul(&write_syscall.buf)
+        let buf = CStr::from_bytes_until_nul(&write_syscall.buf)
             .unwrap_or_default()
             .to_str()
             .unwrap_or_default();
+
+        let mut new_contents = open_file.contents.clone();
+        let buf_size = buf.len();
+        let start = open_file.offset as usize;
+        let end = start + buf_size;
+        if end > new_contents.len() {
+            new_contents.push_str(&"*".repeat(end as usize - new_contents.len()));
+        }
+        new_contents.replace_range(start..end, buf);
+
         println!(
-            "WRITE KERNEL: DATA {:?} FILENAME: {:?} STORED OFFSET: {:?} LEN: {:?}",
+            "WRITE KERNEL: DATA {:?} FILENAME: {:?} STORED OFFSET: {:?} LEN: {:?} NEW_CONTENTS: {:?}",
             write_syscall,
-            filename,
-            offset,
-            contents.len()
+            open_file.filename,
+            open_file.offset,
+            buf.len(),
+            new_contents
         );
-        let _ = self.resolved_files.send(FSTracerFile {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            absolute_path: filename.to_string(),
-            contents: contents.to_string(),
-            offset,
-        });
+        self.resolved_files
+            .send(FSTracerFile {
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                absolute_path: open_file.filename.to_string(),
+                contents: new_contents.clone(),
+                offset: open_file.offset,
+            })
+            .expect("Failed to send file to the resolved_files channel!");
         self.open_files
             .remove(&(write_syscall.fd, write_syscall.pid));
         self.open_files.insert(
             (write_syscall.fd, write_syscall.pid),
-            (filename.clone(), offset + write_syscall.count),
+            OpenFile {
+                filename: open_file.filename,
+                offset: open_file.offset + write_syscall.count,
+                contents: new_contents,
+            },
         );
         Ok(())
     }
 
     fn handle_fseek(&mut self, fseek_syscall: FSeekSyscallBPF) -> Result<(), ()> {
-        let (filename, offset) = match self.open_files.get(&(fseek_syscall.fd, fseek_syscall.pid)) {
+        let open_file = match self.open_files.get(&(fseek_syscall.fd, fseek_syscall.pid)) {
             None => {
                 println!(
                     "DIDNT FIND AN OPEN FILE FOR THE FSEEK SYSCALL (fd: {}, ret: {})",
@@ -81,22 +105,25 @@ impl SyscallHandler {
         };
         println!(
             "FSEEK KERNEL: DATA {:?} FILENAME: {:?} STORED OFFSET: {:?}",
-            fseek_syscall, filename, offset,
+            fseek_syscall, open_file.filename, open_file.offset,
         );
         self.open_files
             .remove(&(fseek_syscall.fd, fseek_syscall.pid));
 
-        //TODO: treat fseek_syscall.whence
         let final_offset: i64 = match fseek_syscall.whence {
-            0 => fseek_syscall.offset,          //SEEK_SET
-            1 => offset + fseek_syscall.offset, //SEEK_CUR
-            2 => -1,                            //SEEK_END
+            0 => fseek_syscall.offset,                    //SEEK_SET
+            1 => open_file.offset + fseek_syscall.offset, //SEEK_CUR
+            2 => -1,                                      //SEEK_END
             _ => panic!("Invalid whence value!"),
         };
 
         self.open_files.insert(
             (fseek_syscall.fd, fseek_syscall.pid),
-            (filename.clone(), final_offset),
+            OpenFile {
+                filename: open_file.filename,
+                offset: final_offset,
+                contents: open_file.contents,
+            },
         );
         Ok(())
     }
@@ -109,8 +136,14 @@ impl SyscallHandler {
         println!("OPEN KERNEL DATA: {:?}", open_syscall);
         println!("OPEN FILENAME: {:?}", filename);
         let fd = open_syscall.ret;
-        self.open_files
-            .insert((fd, open_syscall.pid), (filename.to_string(), 0));
+        self.open_files.insert(
+            (fd, open_syscall.pid),
+            OpenFile {
+                filename: filename.to_string(),
+                offset: 0,
+                contents: "".to_string(),
+            },
+        );
         Ok(())
     }
 

@@ -10,7 +10,6 @@ use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
 use serde::Serialize;
 use std::env;
-use std::ffi::c_long;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -150,7 +149,7 @@ struct FSTracerFile {
 }
 
 fn send_request(url: &str, fs_tracer_api_key: &str, files: &Vec<FSTracerFile>) {
-    //TODO: Retries
+    //TODO: Retries. We also need to handle when you reopen a file.
     let serialized_body = serde_json::to_string(files).unwrap();
     let resp = ureq::post(&url)
         .set("API_KEY", &fs_tracer_api_key)
