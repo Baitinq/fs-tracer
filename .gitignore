@@ -17,4 +17,6 @@ Cargo.lock
 
 .direnv/
 
-log
+log*
+
+tests/a.out
