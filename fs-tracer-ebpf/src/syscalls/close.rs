@@ -18,7 +18,7 @@ pub fn handle_sys_close(
 }
 
 unsafe fn handle_sys_close_enter(ctx: TracePointContext) -> Result<c_long, c_long> {
-    info!(&ctx, "handle_sys_close start");
+    // info!(&ctx, "handle_sys_close start");
     #[repr(C)]
     #[derive(Clone, Copy)]
     struct CloseSyscallArgs {
@@ -40,7 +40,7 @@ unsafe fn handle_sys_close_enter(ctx: TracePointContext) -> Result<c_long, c_lon
 }
 
 unsafe fn handle_sys_close_exit(ctx: TracePointContext) -> Result<c_long, c_long> {
-    info!(&ctx, "handle_sys_close_exit start");
+    // info!(&ctx, "handle_sys_close_exit start");
     let ret = ctx.read_at::<c_long>(16)?; //TODO: We cant use unwrap, thats why we couldnt use the aya helper fns
 
     let tgid = ctx.tgid();

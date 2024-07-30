@@ -1,4 +1,8 @@
-use std::ffi::CStr;
+use log::info;
+use std::collections::HashMap;
+use std::io::Read;
+use std::path::Path;
+use std::{ffi::CStr, fs::File};
 
 use crossbeam_channel::Sender;
 use delay_map::HashMapDelay;
@@ -19,6 +23,7 @@ struct OpenFile {
 pub struct SyscallHandler {
     resolved_files: Sender<FSTracerFile>,
     open_files: HashMapDelay<(i32, u32), OpenFile>,
+    seen_files: HashMap<String, String>,
 }
 
 impl SyscallHandler {
@@ -26,6 +31,7 @@ impl SyscallHandler {
         Self {
             resolved_files,
             open_files: HashMapDelay::new(std::time::Duration::from_secs(400)),
+            seen_files: HashMap::new(),
         }
     }
 
@@ -41,7 +47,7 @@ impl SyscallHandler {
     fn handle_write(&mut self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
         let open_file = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
             None => {
-                println!(
+                info!(
                     "DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL (fd: {}, ret: {})",
                     write_syscall.fd, write_syscall.ret
                 );
@@ -63,12 +69,13 @@ impl SyscallHandler {
         }
         new_contents.replace_range(start..end, buf);
 
-        println!(
-            "WRITE KERNEL: DATA {:?} FILENAME: {:?} STORED OFFSET: {:?} LEN: {:?} NEW_CONTENTS: {:?}",
+        info!(
+            "WRITE KERNEL: DATA {:?} FILENAME: {:?} STORED OFFSET: {:?} LEN: {:?} OLD_CONTENTS: {:?}, NEW_CONTENTS: {:?}",
             write_syscall,
             open_file.filename,
             open_file.offset,
             buf.len(),
+            open_file.contents,
             new_contents
         );
         self.resolved_files
@@ -95,7 +102,7 @@ impl SyscallHandler {
     fn handle_fseek(&mut self, fseek_syscall: FSeekSyscallBPF) -> Result<(), ()> {
         let open_file = match self.open_files.get(&(fseek_syscall.fd, fseek_syscall.pid)) {
             None => {
-                println!(
+                info!(
                     "DIDNT FIND AN OPEN FILE FOR THE FSEEK SYSCALL (fd: {}, ret: {})",
                     fseek_syscall.fd, fseek_syscall.ret
                 );
@@ -103,7 +110,7 @@ impl SyscallHandler {
             }
             Some(str) => str.clone(),
         };
-        println!(
+        info!(
             "FSEEK KERNEL: DATA {:?} FILENAME: {:?} STORED OFFSET: {:?}",
             fseek_syscall, open_file.filename, open_file.offset,
         );
@@ -133,27 +140,62 @@ impl SyscallHandler {
             .unwrap_or_default()
             .to_str()
             .unwrap_or_default();
-        println!("OPEN KERNEL DATA: {:?}", open_syscall);
-        println!("OPEN FILENAME: {:?}", filename);
+        info!("OPEN KERNEL DATA: {:?}", open_syscall);
+        info!("OPEN FILENAME: {:?}", filename);
+
+        // if filename.starts_with("/") && !filename.starts_with("/home/") {
+        //     info!("Ignoring file: {}", filename);
+        //     return Ok(());
+        // }
+        //
+        // let mut contents = "".to_string();
+        // let path = Path::new(filename);
+        // if false && path.exists() && !path.is_dir() {
+        //     info!("Will read file contents for {}", filename);
+        //     let mut buf = vec![];
+        //     let mut file = File::open(filename).expect("unable to open file for reading");
+        //     file.read_to_end(&mut buf).expect("unable to read file");
+        //     let str = String::from_utf8_lossy(&buf);
+        //     contents = str.to_string();
+        //     info!("Read file contents for {}", filename);
+        // } else {
+        //     info!("File previously didnt exist: {}", filename);
+        // }
+        //
+
+        let mut contents = String::from("");
+        match self.seen_files.get(filename) {
+            Some(content) => {
+                contents = content.to_string();
+                info!(
+                    "Fetched file contents from memory {}: {}",
+                    filename, content
+                );
+            }
+            None => {
+                info!("File previously wasnt seen: {}", filename);
+            }
+        }
+
         let fd = open_syscall.ret;
         self.open_files.insert(
             (fd, open_syscall.pid),
             OpenFile {
                 filename: filename.to_string(),
                 offset: 0,
-                contents: "".to_string(),
+                contents,
             },
         );
         Ok(())
     }
 
     fn handle_close(&mut self, close_syscall: CloseSyscallBPF) -> Result<(), ()> {
-        let filename = match self
+        let open_file = match self
             .open_files
             .remove(&(close_syscall.fd, close_syscall.pid))
         {
             None => {
-                println!(
+                info!(
                     "DIDNT FIND AN OPEN FILE FOR THE CLOSE SYSCALL (fd: {})",
                     close_syscall.fd
                 );
@@ -161,8 +203,16 @@ impl SyscallHandler {
             }
             Some(str) => str,
         };
-        println!("CLOSE KERNEL DATA: {:?}", close_syscall);
-        println!("CLOSE FILENAME: {:?}", filename);
+        info!("CLOSE KERNEL DATA: {:?}", close_syscall);
+        info!(
+            "CLOSE FILENAME {:?} with contents: {:?}",
+            open_file.filename, open_file.contents
+        );
+
+        // NOTE: This is a hack.
+        self.seen_files
+            .insert(open_file.filename, open_file.contents);
+
         Ok(())
     }
 }

@@ -117,15 +117,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut resolved_files_for_request: Vec<FSTracerFile> = vec![];
     for elt in &resolved_files_recv {
         info!("HELLO123!");
-        if elt.absolute_path.starts_with("/proc/") {
-            continue;
-        }
         resolved_files_for_request.push(elt);
-        if last_sent_time.elapsed() < batch_timeout {
+        if last_sent_time.elapsed() < batch_timeout && resolved_files_for_request.len() < 1000 {
             continue;
         }
 
-        info!("SENDING REQUEST!");
+        info!("SENDING REQUEST! {}", resolved_files_for_request.len());
         send_request(&url, &fs_tracer_api_key, &resolved_files_for_request);
         resolved_files_for_request.clear();
         last_sent_time = Instant::now();
