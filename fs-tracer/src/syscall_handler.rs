@@ -1,3 +1,4 @@
+use libc::O_APPEND;
 use log::info;
 use std::collections::HashMap;
 use std::io::Read;
@@ -18,6 +19,7 @@ struct OpenFile {
     filename: String,
     offset: i64,
     contents: String,
+    has_append_mode: bool,
 }
 
 pub struct SyscallHandler {
@@ -45,7 +47,7 @@ impl SyscallHandler {
     }
 
     fn handle_write(&mut self, write_syscall: WriteSyscallBPF) -> Result<(), ()> {
-        let open_file = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
+        let mut open_file = match self.open_files.get(&(write_syscall.fd, write_syscall.pid)) {
             None => {
                 info!(
                     "DIDNT FIND AN OPEN FILE FOR THE WRITE SYSCALL (fd: {}, ret: {})",
@@ -59,6 +61,10 @@ impl SyscallHandler {
             .unwrap_or_default()
             .to_str()
             .unwrap_or_default();
+
+        if open_file.has_append_mode {
+            open_file.offset = open_file.contents.len() as i64;
+        }
 
         let mut new_contents = open_file.contents.clone();
         let buf_size = buf.len();
@@ -94,6 +100,7 @@ impl SyscallHandler {
                 filename: open_file.filename,
                 offset: open_file.offset + write_syscall.count,
                 contents: new_contents,
+                has_append_mode: open_file.has_append_mode,
             },
         );
         Ok(())
@@ -130,6 +137,7 @@ impl SyscallHandler {
                 filename: open_file.filename,
                 offset: final_offset,
                 contents: open_file.contents,
+                has_append_mode: open_file.has_append_mode,
             },
         );
         Ok(())
@@ -178,12 +186,14 @@ impl SyscallHandler {
         }
 
         let fd = open_syscall.ret;
+        let has_append_mode = open_syscall.flags == O_APPEND;
         self.open_files.insert(
             (fd, open_syscall.pid),
             OpenFile {
                 filename: filename.to_string(),
                 offset: 0,
                 contents,
+                has_append_mode,
             },
         );
         Ok(())

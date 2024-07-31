@@ -111,7 +111,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     drop(resolved_files_send);
 
-    let batch_timeout = Duration::from_secs(20);
+    let batch_timeout = Duration::from_secs(7);
     let mut last_sent_time = Instant::now();
 
     let mut resolved_files_for_request: Vec<FSTracerFile> = vec![];
