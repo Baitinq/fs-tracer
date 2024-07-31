@@ -1,2 +1,2 @@
 put agent in docker
-it seems like openat is not the only active syscall there is?
+have some way to know if agent is online. also have rollback capabilities
