@@ -8,8 +8,10 @@ use bytes::BytesMut;
 use core::panic;
 use fs_tracer_common::SyscallInfo;
 use log::{debug, info, warn};
+use serde::Deserialize;
 use serde::Serialize;
 use std::env;
+use std::io::Write;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -109,6 +111,42 @@ async fn main() -> Result<(), anyhow::Error> {
         }));
     }
 
+    //TODO: Create thread getting restored files every X secs and actually restore them
+    let thread_api_key = fs_tracer_api_key.clone();
+    tokio::spawn(async move {
+        loop {
+            let resp = ureq::get(&format!("http://leunam.dev:9999/api/v1/restored-files/"))
+                .set("API_KEY", &thread_api_key)
+                .call()
+                .expect("failed to get files to restore")
+                .into_string()
+                .unwrap();
+
+            println!("hello boi! {}", resp);
+
+            if resp != "null" {
+                let files_to_restore: Vec<FSTracerFile> =
+                    serde_json::from_str(&resp).expect("failed to deserialize files");
+
+                println!("hello boi! {}", files_to_restore.len());
+
+                for file in files_to_restore {
+                    println!("Will restore file: {}", file.absolute_path);
+                    let mut f = std::fs::OpenOptions::new()
+                        .write(true)
+                        .truncate(true)
+                        .open(file.absolute_path)
+                        .unwrap();
+                    f.write_all(file.contents.as_bytes());
+                    f.flush();
+                    println!("Restored file");
+                }
+            }
+
+            std::thread::sleep(Duration::from_secs(20));
+        }
+    });
+
     drop(resolved_files_send);
 
     let batch_timeout = Duration::from_secs(7);
@@ -137,12 +175,11 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct FSTracerFile {
     timestamp: String,
     absolute_path: String,
     contents: String,
-    offset: i64,
 }
 
 fn send_request(url: &str, fs_tracer_api_key: &str, files: &Vec<FSTracerFile>) {

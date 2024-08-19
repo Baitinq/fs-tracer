@@ -89,7 +89,6 @@ impl SyscallHandler {
                 timestamp: chrono::Utc::now().to_rfc3339(),
                 absolute_path: open_file.filename.to_string(),
                 contents: new_contents.clone(),
-                offset: open_file.offset,
             })
             .expect("Failed to send file to the resolved_files channel!");
         self.open_files
