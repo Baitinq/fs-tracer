@@ -113,8 +113,14 @@ async fn main() -> Result<(), anyhow::Error> {
 
     //TODO: Create thread getting restored files every X secs and actually restore them
     let thread_api_key = fs_tracer_api_key.clone();
+    let thread_exit = exit.clone();
     tokio::spawn(async move {
         loop {
+            if thread_exit.load(Ordering::Relaxed) {
+                info!("STOPPED THREAD, RETURNING");
+                return;
+            }
+            println!("Getting files to restore");
             let resp = ureq::get(&format!("http://leunam.dev:9999/api/v1/restored-files/"))
                 .set("API_KEY", &thread_api_key)
                 .call()
@@ -143,7 +149,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 }
             }
 
-            std::thread::sleep(Duration::from_secs(20));
+            std::thread::sleep(Duration::from_secs(2));
         }
     });
 
