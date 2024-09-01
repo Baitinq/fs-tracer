@@ -1,6 +1,7 @@
 # fs-tracer
 
-Related: https://github.com/baitinq/fs-tracer-backend
+This repository contains the eBPF agent for monitoring POSIX filesystem modifications. It works in conjunction with the backend services found in [fs-tracer-backend](https://github.com/baitinq/fs-tracer-backend) and [frotend part](https://github.com/baitinq/fs-tracer-frontend) of the application.
+
 
 ## Prerequisites
 
@@ -26,3 +27,7 @@ cargo build
 ```bash
 RUST_LOG=info cargo xtask run
 ```
+
+Related:
+- https://github.com/baitinq/fs-tracer-backend
+- https://github.com/baitinq/fs-tracer-frontend
